@@ -52,6 +52,16 @@ html[data-z] .btn{min-height:calc(50px*var(--z))}html[data-z] .btn.sm{min-height
 html[data-z] .inp,html[data-z] .search{height:calc(50px*var(--z))}html[data-z] textarea.inp{height:auto;min-height:calc(72px*var(--z))}
 html[data-z] .fab{height:calc(54px*var(--z));border-radius:calc(27px*var(--z))}html[data-z] .row{min-height:calc(62px*var(--z))}html[data-z] svg.i{width:calc(24px*var(--z));height:calc(24px*var(--z))}
 html[data-z] .field>label,html[data-z] .lab{font-weight:700;color:var(--ink)}html[data-z] .seg button,html[data-z] .chip{font-weight:700}
+.inp select,select.inp{-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 22px) 50%,calc(100% - 16px) 50%;background-size:6px 6px,6px 6px;background-repeat:no-repeat;padding-right:40px;font-weight:700}
+#rotateMsg{display:none}
+@media (orientation:landscape) and (max-height:520px){
+  #rotateMsg{display:flex;position:fixed;inset:0;z-index:99999;background:var(--bg);color:var(--ink);flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;font-weight:700;font-size:20px}
+  #rotateMsg b{font-size:48px}
+}
+.inp[type=date]{display:block;width:100%;max-width:100%;min-width:0;-webkit-appearance:none;appearance:none;text-align:left;line-height:normal;padding-right:10px;overflow:hidden}
+input[type=date]::-webkit-date-and-time-value{text-align:left;margin:0;min-height:1.3em}
+input[type=date]::-webkit-calendar-picker-indicator{margin:0;padding:0}
+.field,.grid2>*{min-width:0;max-width:100%}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -92,7 +102,10 @@ html[data-z] .field>label,html[data-z] .lab{font-weight:700;color:var(--ink)}htm
 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--font-body);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
-body.lock{overflow:hidden}
+body.lock{position:fixed;left:0;right:0;width:100%;overflow:hidden}
+html,body{overflow-x:hidden;max-width:100%}
+.sheet-body{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.backdrop,.sheet-head,.sheet-foot{touch-action:none}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
 input,select,textarea{font:inherit;color:inherit}
 h1,h2,h3,p{margin:0}
@@ -300,7 +313,9 @@ function money(n){return fmtInt(n)+'đ';}
 function fmtQ(n){return String(Math.round((n||0)*100)/100).replace('.',',');}
 function tick(v){return v===0?'0':v>=1e6?fmtQ(v/1e6)+'tr':fmtQ(v/1e3)+'k';}
 function qtyN(s){var n=parseFloat(String(s||'').replace(',','.'));return isFinite(n)&&n>0?n:0;}
-function moneyN(s){var n=parseInt(String(s||'').replace(/[^\d]/g,''),10)||0;return n;}
+function moneyN(s){var t=String(s||'').replace(/[^\d,]/g,'');if(!t)return 0;var p=t.split(',');var v=parseFloat(p[0]+(p.length>1?'.'+p.slice(1).join(''):''));return isNaN(v)?0:Math.round(v*1000);}
+function fmtK(n){var v=Math.round(Math.abs(n||0));if(!v)return '';var ip=Math.floor(v/1000),fr=v%1000;var t=String(ip).replace(/\B(?=(\d{3})+(?!\d))/g,'.');if(fr){var f=String(fr);while(f.length<3)f='0'+f;f=f.replace(/0+$/,'');t+=','+f;}return t;}
+function typingFmt(raw){var t=String(raw||'').replace(/[^\d,]/g,'');var i=t.indexOf(',');var ip=i<0?t:t.slice(0,i);var dec=i<0?null:t.slice(i+1).replace(/,/g,'').slice(0,3);ip=ip.replace(/^0+(?=\d)/,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.');return dec===null?ip:ip+','+dec;}
 function key(s){return String(s||'').trim().toLowerCase();}
 function clean(o){return JSON.parse(JSON.stringify(o));}
 function relDate(s){
@@ -329,26 +344,40 @@ function icon(n){return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">'
 /* ================= lưu trữ ================= */
 var LS_KEY='soBanGa.v1';
 var BANKS=[['VCB','Vietcombank'],['CTG','VietinBank'],['BIDV','BIDV'],['VBA','Agribank'],['MB','MB Bank'],['TCB','Techcombank'],['ACB','ACB'],['VPB','VPBank'],['TPB','TPBank'],['STB','Sacombank'],['HDB','HDBank'],['VIB','VIB'],['SHB','SHB'],['OCB','OCB'],['MSB','MSB'],['SCB','SCB'],['EIB','Eximbank'],['LPB','LPBank'],['SEAB','SeABank'],['NAB','Nam A Bank'],['BAB','Bac A Bank'],['ABB','ABBank'],['NCB','NCB'],['BVB','BaoViet Bank'],['PVCB','PVcomBank'],['KLB','Kienlongbank'],['VAB','VietABank'],['VCCB','Viet Capital Bank'],['CAKE','CAKE'],['Ubank','Ubank']];
-var BANK={bank:'',acc:'',name:''},cloudRoot=null,lastQr='';
-try{var _b=JSON.parse(localStorage.getItem('soBanGa.bank')||'null');if(_b&&_b.acc)BANK=_b;}catch(e){}
+var ACCTS=[],cloudRoot=null,lastQr='',editAcct=null;
+try{
+  var _a=JSON.parse(localStorage.getItem('soBanGa.accts')||'null');
+  if(Array.isArray(_a))ACCTS=_a;
+  else{var _b=JSON.parse(localStorage.getItem('soBanGa.bank')||'null');if(_b&&_b.acc)ACCTS=[{id:'a1',bank:_b.bank,acc:_b.acc,name:_b.name,label:''}];}
+}catch(e){}
+function bankName(c){for(var i=0;i<BANKS.length;i++)if(BANKS[i][0]===c)return BANKS[i][1];return c;}
+function acctLabel(a){return (a.label?a.label+' · ':'')+bankName(a.bank)+' '+a.acc;}
+function pickAcct(){var id=F&&F.qrAcc;if(!id){try{id=localStorage.getItem('soBanGa.lastAcct');}catch(e){}}for(var i=0;i<ACCTS.length;i++)if(ACCTS[i].id===id)return ACCTS[i];return ACCTS[0]||null;}
 function noAccent(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D');}
 function qrAmount(){if(!F)return 0;if(F.kind==='order')return calc().paid;if(F.kind==='pay')return moneyN(F.amount);return 0;}
 function renderQR(){
   var box=document.getElementById('qrBox');if(!box||!F)return;
   var btn=document.getElementById('qrBtn');if(btn)btn.textContent=F.qrOn?'Ẩn mã QR':'Hiện mã QR thu tiền';
+  var sel=document.getElementById('qrSel'),ac=pickAcct();
+  if(sel){
+    if(F.qrOn&&ACCTS.length>1){
+      var h='<div class="field" style="margin-top:10px"><label for="qrAcc">Nhận tiền vào tài khoản</label><select class="inp" id="qrAcc" data-act="qracc">'+ACCTS.map(function(a){return '<option value="'+esc(a.id)+'"'+(ac&&ac.id===a.id?' selected':'')+'>'+esc(acctLabel(a))+'</option>';}).join('')+'</select></div>';
+      if(sel.dataset.h!==h){sel.innerHTML=h;sel.dataset.h=h;}
+    }else{sel.innerHTML='';sel.dataset.h='';}
+  }
   if(!F.qrOn){box.innerHTML='';lastQr='';return;}
-  if(!BANK.bank||!BANK.acc){box.innerHTML='<div class="hint">Chưa cài tài khoản ngân hàng. Bấm biểu tượng ở góc trên bên phải màn hình chính, vào Tuỳ chọn để nhập.</div>';lastQr='';return;}
+  if(!ac||!ac.bank||!ac.acc){box.innerHTML='<div class="hint">Chưa cài tài khoản ngân hàng. Bấm biểu tượng ở góc trên bên phải màn hình chính, vào Tuỳ chọn để thêm.</div>';lastQr='';return;}
   var amt=qrAmount();
   if(!amt){box.innerHTML='<div class="hint">Chưa có số tiền khách chuyển. Chọn "Trả đủ" hoặc nhập số khách đã trả.</div>';lastQr='';return;}
   var memo=noAccent('SBG '+(F.customer||F.name||'')).replace(/[^A-Za-z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,40);
-  var url='https://img.vietqr.io/image/'+encodeURIComponent(BANK.bank)+'-'+encodeURIComponent(BANK.acc)+'-compact2.png?amount='+amt+'&addInfo='+encodeURIComponent(memo)+'&accountName='+encodeURIComponent(noAccent(BANK.name).toUpperCase());
+  var url='https://img.vietqr.io/image/'+encodeURIComponent(ac.bank)+'-'+encodeURIComponent(ac.acc)+'-compact2.png?amount='+amt+'&addInfo='+encodeURIComponent(memo)+'&accountName='+encodeURIComponent(noAccent(ac.name).toUpperCase());
   if(url===lastQr&&box.firstChild)return;
   lastQr=url;
-  box.innerHTML='<div style="text-align:center;margin-top:10px"><img src="'+esc(url)+'" alt="Mã QR chuyển khoản" style="width:100%;max-width:320px;border-radius:12px;background:#fff" onerror="this.outerHTML=\'<div class=hint>Không tải được mã QR. Kiểm tra mạng và thông tin ngân hàng.</div>\'"><div class="hint" style="margin-top:6px">Quét bằng app ngân hàng · '+money(amt)+'</div></div>';
+  box.innerHTML='<div style="text-align:center;margin-top:10px"><img src="'+esc(url)+'" alt="Mã QR chuyển khoản" style="width:100%;max-width:320px;border-radius:12px;background:#fff" onerror="this.outerHTML=\'<div class=hint>Không tải được mã QR. Kiểm tra mạng và thông tin ngân hàng.</div>\'"><div class="hint" style="margin-top:6px">'+esc(bankName(ac.bank))+' · '+esc(ac.acc)+' · '+esc(ac.name)+'<br>Quét bằng app ngân hàng · '+money(amt)+'</div></div>';
 }
-function bankSave(o){
-  BANK=o;try{localStorage.setItem('soBanGa.bank',JSON.stringify(o));}catch(e){}
-  if(cloudRoot)return cloudRoot.collection('settings').doc('bank').set(o);
+function acctSave(){
+  try{localStorage.setItem('soBanGa.accts',JSON.stringify(ACCTS));}catch(e){}
+  if(cloudRoot)return cloudRoot.collection('settings').doc('accts').set({list:ACCTS});
   return Promise.resolve();
 }
 function localStore(){
@@ -674,9 +703,10 @@ function viewExp(){
 /* ================= ngăn kéo nhập liệu ================= */
 function showSheet(title,body,foot){
   $('#sheetRoot').innerHTML='<div class="backdrop" data-act="close"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="'+esc(title)+'"><div class="sheet-head"><h2>'+esc(title)+'</h2><button class="icon-btn" data-act="close" aria-label="Đóng">'+icon('x')+'</button></div><div class="sheet-body" id="sbody">'+body+'</div><div class="sheet-foot" id="sfoot">'+foot+'</div></div>';
+  if(!document.body.classList.contains('lock')){var sy=window.pageYOffset||0;document.body.dataset.sy=sy;document.body.style.top=(-sy)+'px';}
   document.body.classList.add('lock');armed=false;
 }
-function closeSheet(){$('#sheetRoot').innerHTML='';document.body.classList.remove('lock');F=null;armed=false;}
+function closeSheet(){$('#sheetRoot').innerHTML='';var wasLocked=document.body.classList.contains('lock');document.body.classList.remove('lock');document.body.style.top='';if(wasLocked)window.scrollTo(0,+document.body.dataset.sy||0);F=null;armed=false;}
 function custDL(){
   var names={};S.orders.concat(S.preorders).forEach(function(o){var k=key(o.customer);if(k&&!names[k])names[k]=o.customer.trim();});
   return '<datalist id="dlCust">'+Object.keys(names).map(function(k){return '<option value="'+esc(names[k])+'">';}).join('')+'</datalist>';
@@ -689,18 +719,18 @@ function newLine(name){var l={name:name||'Gà trống ta',custom:false,unit:'kg'
 function autofill(l){
   if(!(l.priceAuto||!l.price))return;
   var p=lastPrice(l.name,l.unit,F.ctype);
-  if(p){l.price=fmtInt(p);l.priceAuto=true;}else if(l.priceAuto){l.price='';}
+  if(p){l.price=fmtK(p);l.priceAuto=true;}else if(l.priceAuto){l.price='';}
 }
 function lineHTML(l,i){
   var many=F.lines.length>1;
-  var chips=allProducts().map(function(p){return '<button type="button" class="chip" aria-pressed="'+(!l.custom&&l.name===p)+'" data-act="prod" data-i="'+i+'" data-v="'+esc(p)+'">'+esc(p)+'</button>';}).join('')+
-    '<button type="button" class="chip" aria-pressed="'+l.custom+'" data-act="prod" data-i="'+i+'" data-v="__other">+ Thêm loại khác</button>';
+  var opts=allProducts().map(function(p){return '<option value="'+esc(p)+'"'+(!l.custom&&l.name===p?' selected':'')+'>'+esc(p)+'</option>';}).join('')+
+    '<option value="__other"'+(l.custom?' selected':'')+'>+ Thêm loại khác...</option>';
   return '<div class="line"><div class="line-h"><span class="lab">Loại gà'+(many?' '+(i+1):'')+'</span>'+(many?'<button type="button" class="rm" data-act="rmline" data-i="'+i+'">Bỏ dòng này</button>':'')+'</div>'+
-    '<div class="chips">'+chips+'</div>'+
+    '<select class="inp" id="lsel'+i+'" data-act="prodsel" data-i="'+i+'" aria-label="Chọn loại gà">'+opts+'</select>'+
     (l.custom?'<input class="inp" id="ln'+i+'n" data-f="name" data-i="'+i+'" placeholder="Gõ tên loại gà mới, VD: Gà ri, Gà chọi" value="'+esc(l.name)+'" autocomplete="off">':'')+
     '<div class="seg" role="group" aria-label="Đơn vị bán"><button type="button" data-act="unit" data-i="'+i+'" data-v="kg" aria-pressed="'+(l.unit==='kg')+'">Bán theo kg</button><button type="button" data-act="unit" data-i="'+i+'" data-v="con" aria-pressed="'+(l.unit==='con')+'">Bán theo con</button></div>'+
     '<div class="grid2 keep"><div class="field"><label for="ln'+i+'q">Số '+l.unit+'</label><input class="inp num" id="ln'+i+'q" data-f="qty" data-i="'+i+'" inputmode="decimal" placeholder="'+(l.unit==='kg'?'VD: 2,5':'VD: 3')+'" value="'+esc(l.qty)+'" autocomplete="off"></div>'+
-    '<div class="field"><label for="ln'+i+'p">Giá 1 '+l.unit+' (đ)</label><input class="inp num" id="ln'+i+'p" data-f="price" data-i="'+i+'" data-money inputmode="numeric" placeholder="VD: 95.000" value="'+esc(l.price)+'" autocomplete="off"></div></div>'+
+    '<div class="field"><label for="ln'+i+'p">Giá 1 '+l.unit+' (nghìn đ)</label><input class="inp num" id="ln'+i+'p" data-f="price" data-i="'+i+'" data-money inputmode="decimal" placeholder="VD: 95 là 95.000đ" value="'+esc(l.price)+'" autocomplete="off"></div></div>'+
     '<div class="hint" data-hint="'+i+'"></div></div>';
 }
 function linesBlock(){
@@ -717,9 +747,9 @@ function bodyHTML(){
       linesBlock()+
       '<div class="field"><span class="lab">Khách trả tiền</span><div class="seg" role="group" aria-label="Cách trả">'+[['full','Trả đủ'],['part','Trả một phần'],['debt','Ghi nợ']].map(function(m){
         return '<button type="button" data-act="paymode" data-v="'+m[0]+'" aria-pressed="'+(F.payMode===m[0])+'">'+m[1]+'</button>';}).join('')+'</div></div>'+
-      '<div class="field" id="paidBox"'+(F.payMode==='part'?'':' hidden')+'><label for="fPaid">Khách đã trả (đ)</label><input class="inp num" id="fPaid" data-f="paid" data-money inputmode="numeric" placeholder="VD: 500.000" value="'+esc(F.paid)+'" autocomplete="off"><div class="hint" id="paidHint"></div></div>'+
+      '<div class="field" id="paidBox"'+(F.payMode==='part'?'':' hidden')+'><label for="fPaid">Khách đã trả (nghìn đ)</label><input class="inp num" id="fPaid" data-f="paid" data-money inputmode="decimal" placeholder="VD: 500 là 500.000đ" value="'+esc(F.paid)+'" autocomplete="off"><div class="hint" id="paidHint"></div></div>'+
       '<div class="totals"><div class="kv"><span>Tổng tiền gà</span><span class="num" id="tTotal"></span></div><div class="kv"><span>Khách đã trả</span><span class="num" id="tPaid"></span></div><div class="kv big"><span>Còn nợ</span><span class="num" id="tLeft"></span></div></div>'+
-      '<div class="field"><button type="button" class="btn ghost block" id="qrBtn" data-act="toggle-qr">Hiện mã QR thu tiền</button><div id="qrBox"></div></div>'+
+      '<div class="field"><button type="button" class="btn ghost block" id="qrBtn" data-act="toggle-qr">Hiện mã QR thu tiền</button><div id="qrSel"></div><div id="qrBox"></div></div>'+
       '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="VD: Giao tới quán lúc 6 giờ sáng">'+esc(F.note)+'</textarea></div>';
   }
   if(F.kind==='pre'){
@@ -727,20 +757,20 @@ function bodyHTML(){
       '<div class="grid2 keep"><div class="field"><label for="fDD">Ngày khách lấy</label><input class="inp" type="date" id="fDD" data-f="ddate" value="'+F.ddate+'"></div>'+
       '<div class="field"><label for="fPh">Số điện thoại</label><input class="inp" id="fPh" data-f="phone" inputmode="tel" placeholder="Không bắt buộc" value="'+esc(F.phone)+'" autocomplete="off"></div></div>'+
       linesBlock()+
-      '<div class="field"><label for="fDep">Khách đã đặt cọc (đ)</label><input class="inp num" id="fDep" data-f="deposit" data-money inputmode="numeric" placeholder="Bỏ trống nếu chưa cọc" value="'+esc(F.deposit)+'" autocomplete="off"><div class="hint" id="depHint"></div></div>'+
+      '<div class="field"><label for="fDep">Khách đã đặt cọc (nghìn đ)</label><input class="inp num" id="fDep" data-f="deposit" data-money inputmode="decimal" placeholder="Bỏ trống nếu chưa cọc" value="'+esc(F.deposit)+'" autocomplete="off"><div class="hint" id="depHint"></div></div>'+
       '<div class="totals"><div class="kv"><span>Tạm tính</span><span class="num" id="tTotal"></span></div><div class="kv"><span>Đã cọc</span><span class="num" id="tPaid"></span></div><div class="kv big"><span>Còn phải thu</span><span class="num" id="tLeft"></span></div></div>'+
       '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="VD: Lấy gà đã nhịn ăn, giao trước 7 giờ">'+esc(F.note)+'</textarea></div>';
   }
   if(F.kind==='exp'){
     return '<div class="field"><span class="lab">Khoản chi</span><div class="chips">'+CATS.map(function(c){return '<button type="button" class="chip" data-act="cat" data-v="'+c[0]+'" aria-pressed="'+(F.cat===c[0])+'">'+c[1]+'</button>';}).join('')+'</div></div>'+
-      '<div class="field"><label for="fAmt">Số tiền (đ)</label><input class="inp num" id="fAmt" data-f="amount" data-money inputmode="numeric" placeholder="VD: 3.500.000" value="'+esc(F.amount)+'" autocomplete="off"><div class="hint" id="amtHint"></div></div>'+
+      '<div class="field"><label for="fAmt">Số tiền (nghìn đ)</label><input class="inp num" id="fAmt" data-f="amount" data-money inputmode="decimal" placeholder="VD: 3.500 là 3.500.000đ" value="'+esc(F.amount)+'" autocomplete="off"><div class="hint" id="amtHint"></div></div>'+
       '<div class="field"><label for="fDate">Ngày chi</label><input class="inp" type="date" id="fDate" data-f="date" value="'+F.date+'"></div>'+
       '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="'+esc(EXP_HINT[F.cat]||EXP_HINT.khac)+'">'+esc(F.note)+'</textarea></div>';
   }
   return '<div class="totals"><div class="kv"><span>Khách</span><b>'+esc(F.name)+'</b></div><div class="kv big"><span>Đang nợ</span><span class="num neg">'+money(F.owed)+'</span></div></div>'+
-    '<div class="field"><label for="fAmt">Khách trả lần này (đ)</label><input class="inp num" id="fAmt" data-f="amount" data-money inputmode="numeric" value="'+esc(F.amount)+'" autocomplete="off"><div class="hint" id="amtHint"></div></div>'+
+    '<div class="field"><label for="fAmt">Khách trả lần này (nghìn đ)</label><input class="inp num" id="fAmt" data-f="amount" data-money inputmode="decimal" value="'+esc(F.amount)+'" autocomplete="off"><div class="hint" id="amtHint"></div></div>'+
     '<button type="button" class="btn ghost" data-act="payfull">Khách trả hết '+money(F.owed)+'</button>'+
-    '<div class="field"><button type="button" class="btn ghost block" id="qrBtn" data-act="toggle-qr">Hiện mã QR thu tiền</button><div id="qrBox"></div></div>'+
+    '<div class="field"><button type="button" class="btn ghost block" id="qrBtn" data-act="toggle-qr">Hiện mã QR thu tiền</button><div id="qrSel"></div><div id="qrBox"></div></div>'+
     '<div class="field"><label for="fDate">Ngày thu</label><input class="inp" type="date" id="fDate" data-f="date" value="'+F.date+'"></div>'+
     '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="VD: Chuyển khoản">'+esc(F.note)+'</textarea></div>';
 }
@@ -773,25 +803,25 @@ function syncForm(){
     $('#tTotal').textContent=money(c.total);$('#tPaid').textContent=money(c.paid);
     var tl=$('#tLeft');tl.textContent=money(c.left);tl.className='num'+(c.left>0&&k==='order'?' neg':'');
     var btn=$('#btnSave');if(btn)btn.textContent=(k==='order'?'Lưu đơn':'Lưu đơn đặt')+(c.total?' · '+money(c.total):'');
-    var ph=$('#paidHint');if(ph)ph.textContent=moneyN(F.paid)?'= '+money(moneyN(F.paid)):'Gõ đủ số tiền, VD: 500.000';
+    var ph=$('#paidHint');if(ph)ph.textContent=moneyN(F.paid)?'= '+money(moneyN(F.paid)):'Gõ theo nghìn đồng: gõ 150 là 150.000đ';
     var dh=$('#depHint');if(dh)dh.textContent=moneyN(F.deposit)?'= '+money(moneyN(F.deposit)):'';
     $$('[data-act="ctype"]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===F.ctype));});
   }else{
-    var ah=$('#amtHint');if(ah)ah.textContent=moneyN(F.amount)?'= '+money(moneyN(F.amount))+(moneyN(F.amount)<1000?'  (nhỏ hơn 1.000đ, kiểm tra lại, phải gõ đủ số)':''):'Gõ đủ số tiền, VD: 500.000';
+    var ah=$('#amtHint');if(ah)ah.textContent=moneyN(F.amount)?'= '+money(moneyN(F.amount)):'Gõ theo nghìn đồng: gõ 150 là 150.000đ';
   }
   renderQR();
 }
 function showErr(m){$('#err').innerHTML=m?'<div class="err" role="alert">'+esc(m)+'</div>':'';}
 
 function linesFromItems(items){
-  return (items||[]).map(function(it){return {name:it.name,custom:allProducts().indexOf(it.name)<0,unit:it.unit,qty:fmtQ(it.qty),price:it.price?fmtInt(it.price):'',priceAuto:false};});
+  return (items||[]).map(function(it){return {name:it.name,custom:allProducts().indexOf(it.name)<0,unit:it.unit,qty:fmtQ(it.qty),price:it.price?fmtK(it.price):'',priceAuto:false};});
 }
 function openOrder(base,pre){
   var o=base&&!pre?base:null;
   F={kind:'order',id:o?o.id:null,createdAt:o?o.createdAt:Date.now(),sample:o?o.sample:undefined,date:o?o.date:today(),
     customer:o?o.customer||'':pre?pre.customer:'',ctype:o?o.ctype||'le':pre?pre.ctype||'le':'le',touched:!!(o||pre),
     lines:[],payMode:'full',paid:'',note:o?o.note||'':'',fromPre:pre?pre.id:null};
-  if(o){F.lines=linesFromItems(o.items);F.payMode=o.paid>=o.total?'full':o.paid<=0?'debt':'part';F.paid=o.paid?fmtInt(o.paid):'';}
+  if(o){F.lines=linesFromItems(o.items);F.payMode=o.paid>=o.total?'full':o.paid<=0?'debt':'part';F.paid=o.paid?fmtK(o.paid):'';}
   else if(pre){F.lines=linesFromItems(pre.items);F.lines.forEach(function(l){if(!l.price){l.priceAuto=true;autofill(l);}});
     F.note=[pre.note,pre.deposit?'Đã cọc '+money(pre.deposit):''].filter(Boolean).join(' · ');}
   else F.lines=[newLine()];
@@ -800,19 +830,19 @@ function openOrder(base,pre){
 function openPre(p){
   F={kind:'pre',id:p?p.id:null,createdAt:p?p.createdAt:Date.now(),sample:p?p.sample:undefined,status:p?p.status:'open',
     customer:p?p.customer:'',ctype:p?p.ctype||'le':'le',touched:!!p,phone:p?p.phone||'':'',ddate:p?p.ddate:addDays(today(),1),
-    lines:[],deposit:p&&p.deposit?fmtInt(p.deposit):'',note:p?p.note||'':''};
+    lines:[],deposit:p&&p.deposit?fmtK(p.deposit):'',note:p?p.note||'':''};
   F.lines=p?linesFromItems(p.items):[newLine()];
   openForm(p?'Sửa đơn đặt':'Khách đặt trước');
 }
 function openExp(e){
-  F={kind:'exp',id:e?e.id:null,createdAt:e?e.createdAt:Date.now(),sample:e?e.sample:undefined,cat:e?e.cat:'nhap',amount:e?fmtInt(e.amount):'',date:e?e.date:today(),note:e?e.note||'':''};
+  F={kind:'exp',id:e?e.id:null,createdAt:e?e.createdAt:Date.now(),sample:e?e.sample:undefined,cat:e?e.cat:'nhap',amount:e?fmtK(e.amount):'',date:e?e.date:today(),note:e?e.note||'':''};
   openForm(e?'Sửa khoản chi':'Ghi khoản chi');
 }
 function openPay(k,p){
   var c=S.debts.filter(function(x){return x.key===k;})[0];
   var name=p?p.customer:c?c.name:'';
   var owed=c?c.owed:0;
-  F={kind:'pay',id:p?p.id:null,createdAt:p?p.createdAt:Date.now(),sample:p?p.sample:undefined,key:k,name:name,owed:p?owed+p.amount:owed,amount:p?fmtInt(p.amount):fmtInt(owed),date:p?p.date:today(),note:p?p.note||'':''};
+  F={kind:'pay',id:p?p.id:null,createdAt:p?p.createdAt:Date.now(),sample:p?p.sample:undefined,key:k,name:name,owed:p?owed+p.amount:owed,amount:p?fmtK(p.amount):fmtK(owed),date:p?p.date:today(),note:p?p.note||'':''};
   openForm(p?'Sửa khoản thu':'Thu nợ');
 }
 
@@ -921,7 +951,7 @@ function downloadFile(name,text,type){
   setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},800);
 }
 function exportJSON(){
-  var out={app:'so-ban-ga',version:1,exportedAt:new Date().toISOString(),bank:BANK,data:{}};
+  var out={app:'so-ban-ga',version:1,exportedAt:new Date().toISOString(),accts:ACCTS,data:{}};
   COLS.forEach(function(c){out.data[c]=S[c];});
   downloadFile('so-ban-ga-'+today()+'.json',JSON.stringify(out),'application/json');
   try{localStorage.setItem('soBanGa.lastExport',String(Date.now()));}catch(e){}
@@ -947,7 +977,7 @@ function importData(obj,srcName){
   var chain=Promise.resolve(),ok=0;
   for(var k=0;k<list.length;k+=25){(function(part){chain=chain.then(function(){return Promise.all(part.map(function(x){return Promise.resolve(store.save(x[0],x[1])).then(function(){ok++;});}));});})(list.slice(k,k+25));}
   chain.then(function(){
-    if(obj.bank&&obj.bank.acc&&!BANK.acc)bankSave(obj.bank);
+    if(!ACCTS.length){if(Array.isArray(obj.accts)&&obj.accts.length){ACCTS=obj.accts;acctSave();}else if(obj.bank&&obj.bank.acc){ACCTS=[{id:'a1',bank:obj.bank.bank,acc:obj.bank.acc,name:obj.bank.name,label:''}];acctSave();}}
     toast('Đã nhập '+ok+' bản ghi');closeSheet();
   }).catch(function(e){console.error(e);toast('Nhập bị lỗi giữa chừng, đã nhập '+ok+' bản ghi. Thử lại nhé.');});
 }
@@ -967,12 +997,17 @@ function sizeHTML(){
   return '<div class="card stack" style="gap:10px"><b>Cỡ chữ và nút bấm</b><div class="seg" role="group" aria-label="Cỡ chữ">'+[['normal','Vừa'],['big','Lớn'],['xl','Rất lớn']].map(function(x){return '<button data-act="zoomui" data-v="'+x[0]+'" aria-pressed="'+(z===x[0])+'">'+x[1]+'</button>';}).join('')+'</div></div>';
 }
 function bankFormHTML(){
-  return '<div class="card stack" style="gap:10px"><b>Tài khoản nhận tiền (mã QR)</b>'+
-    '<div class="field"><label for="bkBank">Ngân hàng</label><select class="inp" id="bkBank"><option value="">Chọn ngân hàng</option>'+BANKS.map(function(b){return '<option value="'+b[0]+'"'+(BANK.bank===b[0]?' selected':'')+'>'+b[1]+'</option>';}).join('')+'</select></div>'+
-    '<div class="field"><label for="bkAcc">Số tài khoản</label><input class="inp" id="bkAcc" inputmode="numeric" autocomplete="off" value="'+esc(BANK.acc)+'"></div>'+
-    '<div class="field"><label for="bkName">Tên chủ tài khoản</label><input class="inp" id="bkName" autocomplete="off" placeholder="VD: NGUYEN VAN A" value="'+esc(BANK.name)+'"></div>'+
+  var e=null;for(var i=0;i<ACCTS.length;i++)if(ACCTS[i].id===editAcct)e=ACCTS[i];
+  var list=ACCTS.length?ACCTS.map(function(a){return '<div class="kv" style="align-items:center;gap:8px"><span style="min-width:0"><b>'+esc(a.label||bankName(a.bank))+'</b><br><span class="small muted">'+esc(bankName(a.bank))+' · '+esc(a.acc)+' · '+esc(a.name)+'</span></span><span style="display:flex;gap:6px;flex:none"><button class="btn sm ghost" data-act="acct-edit" data-id="'+esc(a.id)+'">Sửa</button><button class="btn sm danger" data-act="acct-del" data-id="'+esc(a.id)+'">Xoá</button></span></div>';}).join(''):'<p class="small muted">Chưa có tài khoản nào. Thêm tài khoản bên dưới để hiện mã QR khi bán hàng.</p>';
+  return '<div class="card stack" style="gap:10px"><b>Tài khoản nhận tiền (mã QR)</b>'+list+
+    '<div class="stack" style="gap:10px;border-top:1px solid var(--line);padding-top:12px"><b class="small">'+(e?'Sửa tài khoản':'Thêm tài khoản mới')+'</b>'+
+    '<div class="field"><label for="bkLabel">Tên gợi nhớ (không bắt buộc)</label><input class="inp" id="bkLabel" autocomplete="off" placeholder="VD: Tài khoản chính, Của vợ" value="'+esc(e?e.label||'':'')+'"></div>'+
+    '<div class="field"><label for="bkBank">Ngân hàng</label><select class="inp" id="bkBank"><option value="">Chọn ngân hàng</option>'+BANKS.map(function(b){return '<option value="'+b[0]+'"'+(e&&e.bank===b[0]?' selected':'')+'>'+b[1]+'</option>';}).join('')+'</select></div>'+
+    '<div class="field"><label for="bkAcc">Số tài khoản</label><input class="inp" id="bkAcc" inputmode="numeric" autocomplete="off" value="'+esc(e?e.acc:'')+'"></div>'+
+    '<div class="field"><label for="bkName">Tên chủ tài khoản</label><input class="inp" id="bkName" autocomplete="off" placeholder="VD: NGUYEN VAN A" value="'+esc(e?e.name:'')+'"></div>'+
     '<div class="err" id="bkMsg" style="background:none;padding:0"></div>'+
-    '<button class="btn dark block" data-act="save-bank">Lưu tài khoản</button></div>';
+    '<button class="btn dark block" data-act="save-bank">'+(e?'Lưu thay đổi':'Thêm tài khoản')+'</button>'+
+    (e?'<button class="btn ghost block" data-act="acct-cancel">Huỷ sửa</button>':'')+'</div></div>';
 }
 function openSettings(){
   var body='<div class="stack" style="gap:16px"><p>'+(S.mode==='cloud'?'Sổ được lưu trên đám mây, đăng nhập '+(curUser&&curUser.email?curUser.email:'Google')+'. Mở bằng điện thoại hay máy khác cùng tài khoản này vẫn thấy đủ.':'Sổ đang lưu trong trình duyệt của máy này. Đổi máy hoặc xoá dữ liệu trình duyệt sẽ mất sổ.')+'</p>'+
@@ -995,11 +1030,21 @@ var ACT={
   'restore-mirror':function(){var m=null;try{m=JSON.parse(localStorage.getItem('soBanGa.mirror')||'null');}catch(e){}if(m&&m.data)importData({data:m.data},'bản lưu tự động');else toast('Chưa có bản lưu tự động.');},
   'toggle-qr':function(){F.qrOn=!F.qrOn;lastQr='';renderQR();},
   'save-bank':function(){
-    var b=document.getElementById('bkBank').value,a=document.getElementById('bkAcc').value.replace(/\D/g,''),n=document.getElementById('bkName').value.trim();
+    var b=document.getElementById('bkBank').value,a=document.getElementById('bkAcc').value.replace(/\D/g,''),n=document.getElementById('bkName').value.trim(),lb=document.getElementById('bkLabel').value.trim();
     var m=document.getElementById('bkMsg');
     if(!b||!a){m.textContent='Chọn ngân hàng và nhập số tài khoản.';return;}
     if(!n){m.textContent='Nhập tên chủ tài khoản.';return;}
-    bankSave({bank:b,acc:a,name:n}).then(function(){closeSheet();toast('Đã lưu tài khoản ngân hàng');}).catch(function(){m.textContent='Không lưu lên đám mây được, đã lưu trên máy này.';});
+    if(editAcct){ACCTS=ACCTS.map(function(x){return x.id===editAcct?{id:x.id,bank:b,acc:a,name:n,label:lb}:x;});}
+    else ACCTS.push({id:uid(),bank:b,acc:a,name:n,label:lb});
+    editAcct=null;
+    acctSave().then(function(){toast('Đã lưu tài khoản');openSettings();}).catch(function(){toast('Đã lưu trên máy, chưa lưu lên đám mây được');openSettings();});
+  },
+  'acct-edit':function(el){editAcct=el.dataset.id;openSettings();var b=document.getElementById('bkLabel');if(b)b.scrollIntoView({block:'center'});},
+  'acct-cancel':function(){editAcct=null;openSettings();},
+  'acct-del':function(el){
+    if(!window.confirm('Xoá tài khoản này khỏi danh sách nhận tiền?'))return;
+    var id=el.dataset.id;ACCTS=ACCTS.filter(function(x){return x.id!==id;});if(editAcct===id)editAcct=null;
+    acctSave().catch(function(){});openSettings();
   },
   logout:function(){closeSheet();authApi.signOut().then(function(){location.reload();});},
   close:closeSheet,
@@ -1021,7 +1066,7 @@ var ACT={
   'toggle-debt':function(el){S.open=S.open===el.dataset.v?null:el.dataset.v;render();},
   'goto-debt':function(el){S.tab='debt';S.open=el.dataset.v;render();window.scrollTo(0,0);},
   pay:function(el){openPay(el.dataset.v);},
-  payfull:function(){F.amount=fmtInt(F.owed);var i=$('#fAmt');i.value=F.amount;syncForm();},
+  payfull:function(){F.amount=fmtK(F.owed);var i=$('#fAmt');i.value=F.amount;syncForm();},
   'load-sample':loadSample,
   'clear-sample':clearSample,
   save:save,del:del,
@@ -1057,6 +1102,7 @@ document.addEventListener('input',function(ev){
   var el=ev.target;
   if(el.id==='oq'){S.oq=el.value;S.olimit=40;renderOrderList();return;}
   if(!F||!el.dataset||!el.dataset.f)return;
+  if(el.dataset.money!==undefined){var nv=typingFmt(el.value);if(nv!==el.value)el.value=nv;}
   var f=el.dataset.f;
   if(el.dataset.i!==undefined){
     var l=F.lines[+el.dataset.i];l[f]=el.value;
@@ -1074,7 +1120,7 @@ document.addEventListener('focusout',function(ev){
   var el=ev.target;
   if(!F||!el.dataset||el.dataset.money===undefined)return;
   var n=moneyN(el.value);
-  el.value=n?fmtInt(n):'';
+  el.value=n?fmtK(n):'';
   if(el.dataset.i!==undefined)F.lines[+el.dataset.i][el.dataset.f]=el.value;else F[el.dataset.f]=el.value;
   syncForm();
 });
@@ -1137,7 +1183,13 @@ function boot(){
     var root=fs.collection('users').doc(user.uid);
     var db={collection:function(c){return root.collection(c);}};
     cloudRoot=root;
-    root.collection('settings').doc('bank').get().then(function(d){if(d.exists&&d.data().acc){BANK=d.data();try{localStorage.setItem('soBanGa.bank',JSON.stringify(BANK));}catch(e){}}else if(BANK.acc){root.collection('settings').doc('bank').set(BANK);}}).catch(function(e){console.error(e);});
+    root.collection('settings').doc('accts').get().then(function(d){
+      if(d.exists&&Array.isArray(d.data().list)){ACCTS=d.data().list;try{localStorage.setItem('soBanGa.accts',JSON.stringify(ACCTS));}catch(e){}}
+      else return root.collection('settings').doc('bank').get().then(function(o){
+        if(o.exists&&o.data().acc&&!ACCTS.length){var x=o.data();ACCTS=[{id:'a1',bank:x.bank,acc:x.acc,name:x.name,label:''}];}
+        if(ACCTS.length)return acctSave();
+      });
+    }).catch(function(e){console.error(e);});
     migrateLocal(root,user.uid).catch(function(e){console.error(e);toast('Chưa chuyển được dữ liệu cũ, sẽ thử lại lần sau.');}).then(function(){
       store=cloudStore(db);S.mode=store.mode;store.init();refresh();
     });
@@ -1145,8 +1197,16 @@ function boot(){
 }
 ['gesturestart','gesturechange','gestureend'].forEach(function(n){document.addEventListener(n,function(e){e.preventDefault();});});
 document.addEventListener('touchmove',function(e){if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
+document.addEventListener('touchmove',function(e){if(document.body.classList.contains('lock')&&!(e.target.closest&&e.target.closest('.sheet-body')))e.preventDefault();},{passive:false});
+(function(){var m=document.createElement('div');m.id='rotateMsg';m.innerHTML='<b>&#128241;</b><div>Vui lòng xoay dọc điện thoại</div>';document.body.appendChild(m);
+try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('portrait').catch(function(){});}catch(e){}})();
 var lastTap=0;document.addEventListener('touchend',function(e){var t=Date.now();if(t-lastTap<350)e.preventDefault();lastTap=t;},{passive:false});
 document.addEventListener('wheel',function(e){if(e.ctrlKey)e.preventDefault();},{passive:false});
+document.addEventListener('change',function(ev){
+  var t=ev.target;
+  if(t&&t.dataset&&t.dataset.act==='prodsel'&&F){ACT.prod({dataset:{i:t.dataset.i,v:t.value}});return;}
+  if(t&&t.dataset&&t.dataset.act==='qracc'&&F){F.qrAcc=t.value;try{localStorage.setItem('soBanGa.lastAcct',t.value);}catch(e){}lastQr='';renderQR();return;}
+});
 document.addEventListener('change',function(ev){
   var el=ev.target;if(!el||el.id!=='impFile'||!el.files||!el.files[0])return;
   var fr=new FileReader();fr.onload=function(){var o=null;try{o=JSON.parse(fr.result);}catch(e){}if(!o){toast('Không đọc được file này.');return;}importData(o,'file '+el.files[0].name);};fr.readAsText(el.files[0]);
