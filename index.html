@@ -295,7 +295,7 @@ var CAT_NAME={};CATS.forEach(function(c){CAT_NAME[c[0]]=c[1];});
 var DOW=['CN','T2','T3','T4','T5','T6','T7'];
 var DOWFULL=['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'];
 var S={orders:[],expenses:[],preorders:[],payments:[],loaded:{},ready:false,mode:'',tab:'home',period:'day',sel:null,table:false,
-  ofilter:'all',oq:'',olimit:40,ptab:'open',ecat:'all',elimit:40,open:null,left:{},debts:[]};
+  ofilter:'all',oq:'',olimit:40,ptab:'open',ecat:'all',elimit:40,open:null,left:{},debts:[],credits:[]};
 var store=null,F=null,armed=false,CH=null;
 
 function $(s,r){return (r||document).querySelector(s);}
@@ -316,7 +316,9 @@ function qtyN(s){var n=parseFloat(String(s||'').replace(',','.'));return isFinit
 function moneyN(s){var t=String(s||'').replace(/[^\d,]/g,'');if(!t)return 0;var p=t.split(',');var v=parseFloat(p[0]+(p.length>1?'.'+p.slice(1).join(''):''));return isNaN(v)?0:Math.round(v*1000);}
 function fmtK(n){var v=Math.round(Math.abs(n||0));if(!v)return '';var ip=Math.floor(v/1000),fr=v%1000;var t=String(ip).replace(/\B(?=(\d{3})+(?!\d))/g,'.');if(fr){var f=String(fr);while(f.length<3)f='0'+f;f=f.replace(/0+$/,'');t+=','+f;}return t;}
 function typingFmt(raw){var t=String(raw||'').replace(/[^\d,]/g,'');var i=t.indexOf(',');var ip=i<0?t:t.slice(0,i);var dec=i<0?null:t.slice(i+1).replace(/,/g,'').slice(0,3);ip=ip.replace(/^0+(?=\d)/,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.');return dec===null?ip:ip+','+dec;}
-function key(s){return String(s||'').trim().toLowerCase();}
+function key(s){return String(s||'').normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase();}
+function cleanName(s){return String(s||'').normalize('NFC').replace(/\s+/g,' ').trim();}
+function fold(s){return noAccent(key(s));}
 function clean(o){return JSON.parse(JSON.stringify(o));}
 function relDate(s){
   var t=today(),d=parseYmd(s);
@@ -354,7 +356,7 @@ function bankName(c){for(var i=0;i<BANKS.length;i++)if(BANKS[i][0]===c)return BA
 function acctLabel(a){return (a.label?a.label+' · ':'')+bankName(a.bank)+' '+a.acc;}
 function pickAcct(){var id=F&&F.qrAcc;if(!id){try{id=localStorage.getItem('soBanGa.lastAcct');}catch(e){}}for(var i=0;i<ACCTS.length;i++)if(ACCTS[i].id===id)return ACCTS[i];return ACCTS[0]||null;}
 function noAccent(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D');}
-function qrAmount(){if(!F)return 0;if(F.kind==='order')return calc().paid;if(F.kind==='pay')return moneyN(F.amount);return 0;}
+function qrAmount(){if(!F)return 0;if(F.kind==='order')return calc().now;if(F.kind==='pay')return moneyN(F.amount);return 0;}
 function renderQR(){
   var box=document.getElementById('qrBox');if(!box||!F)return;
   var btn=document.getElementById('qrBtn');if(btn)btn.textContent=F.qrOn?'Ẩn mã QR':'Hiện mã QR thu tiền';
@@ -426,21 +428,28 @@ function derive(){
     left[o.id]=owed>0.5?owed:0;
     var k=key(o.customer);
     if(!k)return;
-    var c=m[k]||(m[k]={key:k,name:o.customer.trim(),ctype:o.ctype,owed:0,orders:[],pays:[]});
+    var c=m[k]||(m[k]={key:k,name:cleanName(o.customer),ctype:o.ctype,owed:0,orders:[],pays:[],hasOrder:true});
     c.ctype=o.ctype||c.ctype;
     if(owed>0.5)c.orders.push(o);
   });
-  S.payments.forEach(function(p){var c=m[p.key||key(p.customer)];if(c)c.pays.push(p);});
+  S.payments.forEach(function(p){
+    var k=key(p.key||p.customer);
+    var c=m[k]||(m[k]={key:k,name:cleanName(p.customer)||k,ctype:'le',owed:0,orders:[],pays:[],hasOrder:false});
+    c.pays.push(p);
+  });
   Object.keys(m).forEach(function(k){
     var c=m[k],P=c.pays.reduce(function(s,p){return s+(p.amount||0);},0);
     c.orders.forEach(function(o){var take=Math.min(left[o.id],P);left[o.id]-=take;P-=take;});
     c.orders=c.orders.filter(function(o){return left[o.id]>0.5;});
     c.owed=c.orders.reduce(function(s,o){return s+left[o.id];},0);
+    c.credit=P>0.5?P:0;
     c.since=c.orders.length?c.orders[0].date:null;
     c.pays.sort(function(a,b){return a.date<b.date?1:-1;});
   });
   S.left=left;
-  S.debts=Object.keys(m).map(function(k){return m[k];}).filter(function(c){return c.owed>0.5;}).sort(function(a,b){return b.owed-a.owed;});
+  var all=Object.keys(m).map(function(k){return m[k];});
+  S.debts=all.filter(function(c){return c.owed>0.5;}).sort(function(a,b){return b.owed-a.owed;});
+  S.credits=all.filter(function(c){return c.credit>0.5;}).sort(function(a,b){return b.credit-a.credit;});
 }
 function weekStart(s){var d=parseYmd(s);return addDays(s,-((d.getDay()+6)%7));}
 function buckets(period){
@@ -617,12 +626,12 @@ function viewOrders(){
 }
 function renderOrderList(){
   var el=$('#olist');if(!el)return;
-  var q=key(S.oq);
+  var q=fold(S.oq);
   var arr=S.orders.slice().sort(byDateDesc).filter(function(o){
     if(S.ofilter==='debt'&&!(S.left[o.id]>0))return false;
     if(S.ofilter==='rest'&&o.ctype!=='nhahang')return false;
     if(S.ofilter==='le'&&o.ctype==='nhahang')return false;
-    if(q){var hay=key((o.customer||'')+' '+(o.items||[]).map(function(i){return i.name;}).join(' ')+' '+(o.customer?'':'khách lẻ'));if(hay.indexOf(q)<0)return false;}
+    if(q){var hay=fold((o.customer||'')+' '+(o.items||[]).map(function(i){return i.name;}).join(' ')+' '+(o.customer?'':'khách lẻ'));if(hay.indexOf(q)<0)return false;}
     return true;
   });
   if(!arr.length){
@@ -644,11 +653,11 @@ function orderRow(o){
 /* ---------- Đặt trước ---------- */
 function viewPre(){
   var open=S.ptab==='open',t=today();
-  var arr=S.preorders.filter(function(p){return open?p.status==='open':p.status!=='open';});
+  var arr=S.preorders.filter(function(p){return S.ptab==='cancel'?p.status==='cancel':S.ptab==='done'?(p.status!=='open'&&p.status!=='cancel'):p.status==='open';});
   arr.sort(function(a,b){return open?(a.ddate<b.ddate?-1:1):(a.ddate<b.ddate?1:-1);});
-  var h='<div class="seg" role="group" aria-label="Trạng thái">'+[['open','Sắp giao'],['done','Đã giao']].map(function(f){
+  var h='<div class="seg" role="group" aria-label="Trạng thái">'+[['open','Sắp giao'],['done','Đã giao'],['cancel','Đã huỷ']].map(function(f){
     return '<button data-act="ptab" data-v="'+f[0]+'" aria-pressed="'+(S.ptab===f[0])+'">'+f[1]+'</button>';}).join('')+'</div>';
-  if(!arr.length)return h+'<div class="empty"><b>'+(open?'Chưa có đơn đặt trước':'Chưa có đơn nào đã giao')+'</b>'+(open?'Khi khách hẹn lấy gà, bấm "Đặt hàng mới" để nhớ ngày giao và tiền cọc.':'Đơn đặt sau khi giao xong sẽ nằm ở đây.')+'</div>';
+  if(!arr.length)return h+'<div class="empty"><b>'+(open?'Chưa có đơn đặt trước':S.ptab==='cancel'?'Chưa có đơn nào bị huỷ':'Chưa có đơn nào đã giao')+'</b>'+(open?'Khi khách hẹn lấy gà, bấm "Đặt hàng mới" để nhớ ngày giao và tiền cọc.':S.ptab==='cancel'?'Đơn đặt bị huỷ sẽ nằm ở đây.':'Đơn đặt sau khi giao xong sẽ nằm ở đây.')+'</div>';
   return h+arr.map(function(p){
     var d=parseYmd(p.ddate),late=open&&p.ddate<t,td=open&&p.ddate===t;
     var est=sumItems(p.items),dep=p.deposit||0;
@@ -665,7 +674,7 @@ function viewPre(){
 /* ---------- Công nợ ---------- */
 function viewDebt(){
   var tot=0,rest=0;S.debts.forEach(function(c){tot+=c.owed;if(c.ctype==='nhahang')rest+=c.owed;});
-  if(!S.debts.length)return '<div class="empty"><b>Không ai đang nợ</b>Khi bạn ghi đơn mà khách trả thiếu, khoản nợ sẽ hiện ở đây.</div>';
+  if(!S.debts.length)return '<div class="empty"><b>Không ai đang nợ</b>Khi bạn ghi đơn mà khách trả thiếu, khoản nợ sẽ hiện ở đây.</div>'+creditHTML();
   var h='<section class="card sum-card"><div><div class="muted small">Tổng tiền khách đang nợ</div><div class="big neg num">'+money(tot)+'</div></div><div style="text-align:right" class="small muted">'+S.debts.length+' khách<br>Nhà hàng: <b style="color:var(--ink)">'+money(rest)+'</b></div></section>';
   return h+S.debts.map(function(c){
     var open=S.open===c.key,days=diffDays(c.since,today());
@@ -678,13 +687,22 @@ function viewDebt(){
         '<button class="btn primary block" style="margin-top:10px" data-act="pay" data-v="'+esc(c.key)+'">Thu nợ</button></div>';
     }
     return '<article class="card debt-card"><button class="head" data-act="toggle-debt" data-v="'+esc(c.key)+'" aria-expanded="'+open+'"><div style="min-width:0"><b style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:16px">'+esc(c.name)+(c.ctype==='nhahang'?'<span class="pill rest">Nhà hàng</span>':'')+'</b><div class="small muted">Nợ từ '+relDate(c.since)+(days>0?' · '+days+' ngày':'')+'</div></div><div class="amt num">'+money(c.owed)+'</div></button>'+body+'</article>';
-  }).join('');
+  }).join('')+creditHTML();
+}
+function creditHTML(){
+  if(!S.credits.length)return '';
+  return '<section class="card"><div class="card-head"><h3>Khách trả dư</h3><span class="muted small">'+money(S.credits.reduce(function(s,c){return s+c.credit;},0))+'</span></div>'+
+    '<p class="small muted" style="margin:4px 0 8px">Số tiền khách trả nhiều hơn số nợ, hoặc khoản thu ghi cho tên không có đơn nào. Phần dư sẽ tự trừ vào đơn nợ sau của khách. Nếu ghi nhầm, bấm Sửa để chữa.</p>'+
+    S.credits.map(function(c){
+      return '<div class="credit" style="border-top:1px solid var(--line);padding:10px 0"><div class="kv"><span><b>'+esc(c.name)+'</b>'+(c.hasOrder?'':'<br><span class="pill debt">Không có đơn nào</span>')+'</span><span class="num" style="color:var(--ok,#1a7f37);white-space:nowrap">Dư '+money(c.credit)+'</span></div>'+
+        c.pays.map(function(p){return '<div class="kv pay small"><span>'+relDate(p.date)+(p.note?' · '+esc(p.note):'')+'</span><span class="num">'+money(p.amount)+'<button class="x" data-act="edit-pay" data-id="'+p.id+'">Sửa</button></span></div>';}).join('')+'</div>';
+    }).join('')+'</section>';
 }
 
 /* ---------- Chi phí ---------- */
 function viewExp(){
-  var t=today(),ms=t.slice(0,8)+'01',tot=0,byc={};
-  S.expenses.forEach(function(e){if(e.date>=ms){tot+=e.amount||0;byc[e.cat]=(byc[e.cat]||0)+(e.amount||0);}});
+  var t=today(),ms=t.slice(0,8)+'01',me=t.slice(0,8)+'31',tot=0,byc={};
+  S.expenses.forEach(function(e){if(e.date>=ms&&e.date<=me){tot+=e.amount||0;byc[e.cat]=(byc[e.cat]||0)+(e.amount||0);}});
   var h='<section class="card"><div class="card-head"><h3>Chi tháng này</h3></div><div class="num" style="font:800 30px/1.1 var(--font-display)">'+money(tot)+'</div>';
   var cats=CATS.filter(function(c){return byc[c[0]]>0;}).sort(function(a,b){return byc[b[0]]-byc[a[0]];});
   if(cats.length){var mx=byc[cats[0][0]];h+='<div class="bl" style="margin-top:14px">'+cats.map(function(c){
@@ -747,8 +765,8 @@ function bodyHTML(){
       linesBlock()+
       '<div class="field"><span class="lab">Khách trả tiền</span><div class="seg" role="group" aria-label="Cách trả">'+[['full','Trả đủ'],['part','Trả một phần'],['debt','Ghi nợ']].map(function(m){
         return '<button type="button" data-act="paymode" data-v="'+m[0]+'" aria-pressed="'+(F.payMode===m[0])+'">'+m[1]+'</button>';}).join('')+'</div></div>'+
-      '<div class="field" id="paidBox"'+(F.payMode==='part'?'':' hidden')+'><label for="fPaid">Khách đã trả (nghìn đ)</label><input class="inp num" id="fPaid" data-f="paid" data-money inputmode="decimal" placeholder="VD: 500 là 500.000đ" value="'+esc(F.paid)+'" autocomplete="off"><div class="hint" id="paidHint"></div></div>'+
-      '<div class="totals"><div class="kv"><span>Tổng tiền gà</span><span class="num" id="tTotal"></span></div><div class="kv"><span>Khách đã trả</span><span class="num" id="tPaid"></span></div><div class="kv big"><span>Còn nợ</span><span class="num" id="tLeft"></span></div></div>'+
+      '<div class="field" id="paidBox"'+(F.payMode==='part'?'':' hidden')+'><label for="fPaid">'+(F.deposit?'Khách trả thêm khi giao (nghìn đ)':'Khách đã trả (nghìn đ)')+'</label><input class="inp num" id="fPaid" data-f="paid" data-money inputmode="decimal" placeholder="VD: 500 là 500.000đ" value="'+esc(F.paid)+'" autocomplete="off"><div class="hint" id="paidHint"></div></div>'+
+      '<div class="totals"><div class="kv"><span>Tổng tiền gà</span><span class="num" id="tTotal"></span></div>'+(F.deposit?'<div class="kv"><span>Đã cọc trước</span><span class="num">'+money(F.deposit)+'</span></div><div class="kv"><span>Thu thêm khi giao</span><span class="num" id="tNow"></span></div>':'')+'<div class="kv"><span>Khách đã trả'+(F.deposit?' (gồm cọc)':'')+'</span><span class="num" id="tPaid"></span></div><div class="kv big"><span>Còn nợ</span><span class="num" id="tLeft"></span></div><div class="hint" id="tRefund"></div></div>'+
       '<div class="field"><button type="button" class="btn ghost block" id="qrBtn" data-act="toggle-qr">Hiện mã QR thu tiền</button><div id="qrSel"></div><div id="qrBox"></div></div>'+
       '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="VD: Giao tới quán lúc 6 giờ sáng">'+esc(F.note)+'</textarea></div>';
   }
@@ -787,20 +805,29 @@ function refreshBody(){var b=$('#sbody'),st=b.scrollTop;b.innerHTML=bodyHTML();b
 function calc(){
   var total=sumItems(F.lines.map(function(l){return {qty:qtyN(l.qty),price:moneyN(l.price)};}));
   var paid;
-  if(F.kind==='order')paid=F.payMode==='full'?total:F.payMode==='debt'?0:Math.min(moneyN(F.paid),total);
+  var dep=F.kind==='order'?(F.deposit||0):0;
+  if(F.kind==='order')paid=F.payMode==='full'?total:F.payMode==='debt'?Math.min(dep,total):Math.min(dep+moneyN(F.paid),total);
   else paid=moneyN(F.deposit);
-  return {total:total,paid:paid,left:Math.max(0,total-paid)};
+  return {total:total,paid:paid,left:Math.max(0,total-paid),dep:dep||0,now:Math.max(0,paid-Math.min(dep||0,total)),refund:Math.max(0,(dep||0)-total)};
 }
+var PRICE_MAX={kg:1000000,con:5000000};
+function priceOdd(l){var p=moneyN(l.price);return p>PRICE_MAX[l.unit==='con'?'con':'kg'];}
 function syncForm(){
   if(!F)return;
   var k=F.kind;
   if(k==='order'||k==='pre'){
     F.lines.forEach(function(l,i){
       var q=qtyN(l.qty),p=moneyN(l.price),h=$('[data-hint="'+i+'"]');
-      if(h)h.textContent=q&&p?fmtQ(q)+' '+l.unit+' × '+money(p)+' = '+money(q*p):(p?'Giá: '+money(p)+' / '+l.unit:'');
+      if(h){
+        var odd=priceOdd(l);
+        h.textContent=(odd?'⚠ Giá '+money(p)+'/'+l.unit+' có vẻ quá cao. Giá gõ theo nghìn đồng: gõ 130 là 130.000đ. ':'')+(q&&p?fmtQ(q)+' '+l.unit+' × '+money(p)+' = '+money(q*p):(p&&!odd?'Giá: '+money(p)+' / '+l.unit:''));
+        h.style.color=odd?'var(--bad,#b3261e)':'';h.style.fontWeight=odd?'700':'';
+      }
     });
     var c=calc();
     $('#tTotal').textContent=money(c.total);$('#tPaid').textContent=money(c.paid);
+    var tn=$('#tNow');if(tn)tn.textContent=money(c.now);
+    var tr=$('#tRefund');if(tr){tr.textContent=c.refund>0?'⚠ Tiền cọc nhiều hơn tiền hàng, nhớ trả lại khách '+money(c.refund)+'.':'';tr.style.color=c.refund>0?'var(--bad,#b3261e)':'';}
     var tl=$('#tLeft');tl.textContent=money(c.left);tl.className='num'+(c.left>0&&k==='order'?' neg':'');
     var btn=$('#btnSave');if(btn)btn.textContent=(k==='order'?'Lưu đơn':'Lưu đơn đặt')+(c.total?' · '+money(c.total):'');
     var ph=$('#paidHint');if(ph)ph.textContent=moneyN(F.paid)?'= '+money(moneyN(F.paid)):'Gõ theo nghìn đồng: gõ 150 là 150.000đ';
@@ -820,7 +847,7 @@ function openOrder(base,pre){
   var o=base&&!pre?base:null;
   F={kind:'order',id:o?o.id:null,createdAt:o?o.createdAt:Date.now(),sample:o?o.sample:undefined,date:o?o.date:today(),
     customer:o?o.customer||'':pre?pre.customer:'',ctype:o?o.ctype||'le':pre?pre.ctype||'le':'le',touched:!!(o||pre),
-    lines:[],payMode:'full',paid:'',note:o?o.note||'':'',fromPre:pre?pre.id:null};
+    lines:[],payMode:'full',paid:'',note:o?o.note||'':'',fromPre:pre?pre.id:null,deposit:pre&&pre.deposit?pre.deposit:0};
   if(o){F.lines=linesFromItems(o.items);F.payMode=o.paid>=o.total?'full':o.paid<=0?'debt':'part';F.paid=o.paid?fmtK(o.paid):'';}
   else if(pre){F.lines=linesFromItems(pre.items);F.lines.forEach(function(l){if(!l.price){l.priceAuto=true;autofill(l);}});
     F.note=[pre.note,pre.deposit?'Đã cọc '+money(pre.deposit):''].filter(Boolean).join(' · ');}
@@ -839,10 +866,10 @@ function openExp(e){
   openForm(e?'Sửa khoản chi':'Ghi khoản chi');
 }
 function openPay(k,p){
-  var c=S.debts.filter(function(x){return x.key===k;})[0];
+  var c=S.debts.concat(S.credits).filter(function(x){return x.key===k;})[0];
   var name=p?p.customer:c?c.name:'';
   var owed=c?c.owed:0;
-  F={kind:'pay',id:p?p.id:null,createdAt:p?p.createdAt:Date.now(),sample:p?p.sample:undefined,key:k,name:name,owed:p?owed+p.amount:owed,amount:p?fmtK(p.amount):fmtK(owed),date:p?p.date:today(),note:p?p.note||'':''};
+  F={kind:'pay',id:p?p.id:null,createdAt:p?p.createdAt:Date.now(),sample:p?p.sample:undefined,key:k,name:name,owed:p?Math.max(0,(c?c.owed-(c.credit||0):0)+p.amount):owed,amount:p?fmtK(p.amount):fmtK(owed),date:p?p.date:today(),note:p?p.note||'':''};
   openForm(p?'Sửa khoản thu':'Thu nợ');
 }
 
@@ -855,11 +882,14 @@ function save(){
     var items=F.lines.map(function(l){return {name:(l.name||'').trim()||'Gà khác',unit:l.unit,qty:qtyN(l.qty),price:moneyN(l.price)};});
     if(k==='order')items=items.filter(function(i){return i.qty>0&&i.price>0;});else items=items.filter(function(i){return i.qty>0;});
     if(!items.length)return showErr(k==='order'?'Nhập số lượng và giá cho ít nhất một loại gà.':'Nhập số lượng gà khách đặt.');
-    var cust=F.customer.trim();
+    var odd=F.lines.filter(priceOdd);
+    if(odd.length&&!window.confirm('Giá '+money(moneyN(odd[0].price))+'/'+odd[0].unit+' ('+(odd[0].name||'gà')+') có vẻ quá cao.\nGiá gõ theo nghìn đồng: gõ 130 là 130.000đ.\n\nBấm OK nếu giá này đúng, hoặc Huỷ để sửa.'))return;
+    var cust=cleanName(F.customer);
     if(k==='order'){
       var c=calc();
       if(c.left>0&&!cust)return showErr('Muốn ghi nợ thì cần có tên khách. Hãy nhập tên người mua ở trên.');
       var o={id:F.id||uid(),date:F.date||today(),customer:cust,ctype:F.ctype,items:items,total:c.total,paid:c.paid,note:F.note.trim(),createdAt:F.createdAt,sample:F.sample};
+      if(F.deposit)o.deposit=F.deposit;
       btn.disabled=true;
       write('orders',o).then(function(){
         if(F&&F.fromPre){var p=S.preorders.filter(function(x){return x.id===F.fromPre;})[0];if(p)return write('preorders',Object.assign({},p,{status:'done'}));}
@@ -876,6 +906,7 @@ function save(){
     write('expenses',{id:F.id||uid(),date:F.date||today(),cat:F.cat,amount:a,note:F.note.trim(),createdAt:F.createdAt,sample:F.sample}).then(function(){finish('Đã lưu khoản chi');}).catch(function(){btn.disabled=false;});
   }else{
     var m=moneyN(F.amount);if(!m)return showErr('Nhập số tiền khách trả.');
+    if(m>F.owed+0.5&&!window.confirm('Khách trả '+money(m)+', nhiều hơn số đang nợ '+money(F.owed)+'.\nPhần dư '+money(m-F.owed)+' sẽ ghi là khách trả dư.\n\nBấm OK để lưu, hoặc Huỷ để sửa lại số tiền.'))return;
     btn.disabled=true;
     write('payments',{id:F.id||uid(),key:F.key,customer:F.name,amount:m,date:F.date||today(),note:F.note.trim(),createdAt:F.createdAt,sample:F.sample}).then(function(){finish('Đã lưu khoản thu');}).catch(function(){btn.disabled=false;});
   }
