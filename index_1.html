@@ -2,13 +2,16 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sổ Bán Gà">
 <title>Sổ Bán Gà</title>
 <meta name="theme-color" content="#f5b21b">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<style>:root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>html,body{touch-action:manipulation;overscroll-behavior:none;-webkit-text-size-adjust:100%;-webkit-user-select:none;user-select:none}input,textarea,select{font-size:16px!important;-webkit-user-select:text;user-select:text}:root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -284,6 +287,29 @@ function icon(n){return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">'
 
 /* ================= lưu trữ ================= */
 var LS_KEY='soBanGa.v1';
+var BANKS=[['VCB','Vietcombank'],['CTG','VietinBank'],['BIDV','BIDV'],['VBA','Agribank'],['MB','MB Bank'],['TCB','Techcombank'],['ACB','ACB'],['VPB','VPBank'],['TPB','TPBank'],['STB','Sacombank'],['HDB','HDBank'],['VIB','VIB'],['SHB','SHB'],['OCB','OCB'],['MSB','MSB'],['SCB','SCB'],['EIB','Eximbank'],['LPB','LPBank'],['SEAB','SeABank'],['NAB','Nam A Bank'],['BAB','Bac A Bank'],['ABB','ABBank'],['NCB','NCB'],['BVB','BaoViet Bank'],['PVCB','PVcomBank'],['KLB','Kienlongbank'],['VAB','VietABank'],['VCCB','Viet Capital Bank'],['CAKE','CAKE'],['Ubank','Ubank']];
+var BANK={bank:'',acc:'',name:''},cloudRoot=null,lastQr='';
+try{var _b=JSON.parse(localStorage.getItem('soBanGa.bank')||'null');if(_b&&_b.acc)BANK=_b;}catch(e){}
+function noAccent(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D');}
+function qrAmount(){if(!F)return 0;if(F.kind==='order')return calc().paid;if(F.kind==='pay')return moneyN(F.amount);return 0;}
+function renderQR(){
+  var box=document.getElementById('qrBox');if(!box||!F)return;
+  var btn=document.getElementById('qrBtn');if(btn)btn.textContent=F.qrOn?'Ẩn mã QR':'Hiện mã QR thu tiền';
+  if(!F.qrOn){box.innerHTML='';lastQr='';return;}
+  if(!BANK.bank||!BANK.acc){box.innerHTML='<div class="hint">Chưa cài tài khoản ngân hàng. Bấm biểu tượng ở góc trên bên phải màn hình chính, vào Tuỳ chọn để nhập.</div>';lastQr='';return;}
+  var amt=qrAmount();
+  if(!amt){box.innerHTML='<div class="hint">Chưa có số tiền khách chuyển. Chọn "Trả đủ" hoặc nhập số khách đã trả.</div>';lastQr='';return;}
+  var memo=noAccent('SBG '+(F.customer||F.name||'')).replace(/[^A-Za-z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,40);
+  var url='https://img.vietqr.io/image/'+encodeURIComponent(BANK.bank)+'-'+encodeURIComponent(BANK.acc)+'-compact2.png?amount='+amt+'&addInfo='+encodeURIComponent(memo)+'&accountName='+encodeURIComponent(noAccent(BANK.name).toUpperCase());
+  if(url===lastQr&&box.firstChild)return;
+  lastQr=url;
+  box.innerHTML='<div style="text-align:center;margin-top:10px"><img src="'+esc(url)+'" alt="Mã QR chuyển khoản" style="width:100%;max-width:320px;border-radius:12px;background:#fff" onerror="this.outerHTML=\'<div class=hint>Không tải được mã QR. Kiểm tra mạng và thông tin ngân hàng.</div>\'"><div class="hint" style="margin-top:6px">Quét bằng app ngân hàng · '+money(amt)+'</div></div>';
+}
+function bankSave(o){
+  BANK=o;try{localStorage.setItem('soBanGa.bank',JSON.stringify(o));}catch(e){}
+  if(cloudRoot)return cloudRoot.collection('settings').doc('bank').set(o);
+  return Promise.resolve();
+}
 function localStore(){
   var data={orders:[],expenses:[],preorders:[],payments:[]};
   try{var raw=localStorage.getItem(LS_KEY);if(raw){var j=JSON.parse(raw);COLS.forEach(function(c){if(Array.isArray(j[c]))data[c]=j[c];});}}catch(e){}
@@ -437,7 +463,7 @@ function sampleBanner(){
 
 /* ---------- Tổng quan ---------- */
 function welcome(){
-  return '<div class="card stack" style="gap:16px"><div><h3 style="font-size:22px">Chào bạn, bắt đầu ghi sổ nhé</h3><p class="muted" style="margin-top:6px">Ghi đơn gà bán cho khách lẻ và nhà hàng, theo dõi ai còn nợ, ai đặt trước, và cuối ngày biết ngay lãi bao nhiêu.</p></div>'+
+  return '<div class="card stack" style="gap:16px"><div><h3 style="font-size:22px">Chào bạn, bắt đầu ghi sổ nhé</h3><p class="muted" style="margin-top:6px">Ghi đơn gà bán cho khách lẻ và nhà hàng, theo dõi ai còn nợ, ai đặt trước, và cuối ngày biết ngay doanh thu bao nhiêu.</p></div>'+
   '<button class="btn primary block" data-act="new-order">Ghi đơn đầu tiên</button><button class="btn ghost block" data-act="load-sample">Xem thử với dữ liệu mẫu</button></div>';
 }
 function viewHome(){
@@ -447,18 +473,18 @@ function viewHome(){
   var lbl={day:'hôm nay',week:'tuần này',month:'tháng này'}[S.period];
   var prevLbl={day:'hôm qua',week:'tuần trước',month:'tháng trước'}[S.period];
   var delta='';
-  if(prev.profit!==0){var pc=Math.round((cur.profit-prev.profit)/Math.abs(prev.profit)*100);delta=(pc>=0?'Tăng ':'Giảm ')+Math.abs(pc)+'% so với '+prevLbl;}
+  if(prev.rev!==0){var pc=Math.round((cur.rev-prev.rev)/Math.abs(prev.rev)*100);delta=(pc>=0?'Tăng ':'Giảm ')+Math.abs(pc)+'% so với '+prevLbl;}
   var foot=cur.cnt?'Đã bán '+fmtQ(cur.kg)+' kg'+(cur.con?' · '+fmtQ(cur.con)+' con':'')+' · '+cur.cnt+' đơn':'Chưa có đơn nào '+lbl;
   var h='<div class="seg" role="group" aria-label="Khoảng thời gian">'+[['day','Hôm nay'],['week','Tuần này'],['month','Tháng này']].map(function(p){
     return '<button data-act="period" data-v="'+p[0]+'" aria-pressed="'+(S.period===p[0])+'">'+p[1]+'</button>';}).join('')+'</div>';
-  h+='<section class="hero"><div class="lbl">'+(cur.profit<0?'Lỗ ':'Lãi ')+lbl+'</div><div class="big num">'+money(cur.profit)+'</div>'+(delta?'<div class="delta">'+delta+'</div>':'')+
-    '<div class="subs"><div class="sub"><span>Doanh thu</span><b class="num">'+money(cur.rev)+'</b></div><div class="sub"><span>Chi phí</span><b class="num">'+money(cur.exp)+'</b></div><div class="sub"><span>Chưa thu</span><b class="num">'+money(cur.left)+'</b></div></div>'+
+  h+='<section class="hero"><div class="lbl">Doanh thu '+lbl+'</div><div class="big num">'+money(cur.rev)+'</div>'+(delta?'<div class="delta">'+delta+'</div>':'')+
+    '<div class="subs"><div class="sub"><span>Đã thu</span><b class="num">'+money(cur.rev-cur.left)+'</b></div><div class="sub"><span>Chưa thu</span><b class="num">'+money(cur.left)+'</b></div><div class="sub"><span>Chi phí</span><b class="num">'+money(cur.exp)+'</b></div></div>'+
     '<div class="foot">'+foot+'</div></section>';
   h+='<section class="card"><div class="card-head"><h3>Thu và chi</h3><div class="legend"><span><i style="background:var(--chart-rev)"></i>Doanh thu</span><span><i style="background:var(--chart-exp)"></i>Chi phí</span></div></div>'+
     '<div class="tip" id="chartTip"></div><div id="chartBox"></div>'+
     '<button class="link" data-act="toggle-table">'+(S.table?'Ẩn bảng số liệu':'Xem bảng số liệu')+'</button>'+
-    (S.table?'<div class="tblwrap"><table class="tbl"><thead><tr><th></th><th>Doanh thu</th><th>Chi phí</th><th>Lãi</th></tr></thead><tbody>'+bks.map(function(b,i){
-      return '<tr><td>'+esc(b.name)+'</td><td>'+money(data[i].rev)+'</td><td>'+money(data[i].exp)+'</td><td class="'+(data[i].profit<0?'neg':'')+'">'+money(data[i].profit)+'</td></tr>';}).join('')+'</tbody></table></div>':'')+
+    (S.table?'<div class="tblwrap"><table class="tbl"><thead><tr><th></th><th>Doanh thu</th><th>Chi phí</th></tr></thead><tbody>'+bks.map(function(b,i){
+      return '<tr><td>'+esc(b.name)+'</td><td>'+money(data[i].rev)+'</td><td>'+money(data[i].exp)+'</td></tr>';}).join('')+'</tbody></table></div>':'')+
     '</section>';
   var tr=cur.rev||1;
   h+='<section class="card"><div class="card-head"><h3>Theo nhóm khách</h3><span class="muted small">'+lbl+'</span></div><div class="bl">'+
@@ -510,7 +536,7 @@ function drawChart(){
   s+='</svg>';
   $('#chartBox').innerHTML=s;
   var d=data[sel];
-  $('#chartTip').innerHTML='<b>'+esc(bks[sel].name)+'</b><span>Thu <b class="num">'+money(d.rev)+'</b></span><span>Chi <b class="num">'+money(d.exp)+'</b></span><span>Lãi <b class="num '+(d.profit<0?'neg':'')+'">'+money(d.profit)+'</b></span>';
+  $('#chartTip').innerHTML='<b>'+esc(bks[sel].name)+'</b><span>Thu <b class="num">'+money(d.rev)+'</b></span><span>Chi <b class="num">'+money(d.exp)+'</b></span>';
 }
 
 /* ---------- Đơn bán ---------- */
@@ -593,7 +619,7 @@ function viewExp(){
     return '<div class="bl-row"><div class="t"><b>'+c[1]+'</b><span>'+money(byc[c[0]])+'</span></div><div class="bar"><i style="width:'+Math.round(byc[c[0]]/mx*100)+'%;background:var(--chart-exp)"></i></div></div>';}).join('')+'</div>';}
   h+='</section><div class="chips">'+[['all','Tất cả']].concat(CATS).map(function(c){return '<button class="chip" data-act="ecat" data-v="'+c[0]+'" aria-pressed="'+(S.ecat===c[0])+'">'+c[1]+'</button>';}).join('')+'</div>';
   var arr=S.expenses.filter(function(e){return S.ecat==='all'||e.cat===S.ecat;}).sort(byDateDesc);
-  if(!arr.length)return h+'<div class="empty"><b>Chưa có khoản chi nào</b>Ghi tiền nhập gà, thức ăn, xăng xe, công người làm để tính đúng lãi.</div>';
+  if(!arr.length)return h+'<div class="empty"><b>Chưa có khoản chi nào</b>Ghi tiền nhập gà, thức ăn, xăng xe, công người làm để theo dõi chi phí riêng với doanh thu.</div>';
   var shown=arr.slice(0,S.elimit),groups=[],gi={};
   shown.forEach(function(e){if(!(e.date in gi)){gi[e.date]=groups.length;groups.push({date:e.date,rows:[],sum:0});}var g=groups[gi[e.date]];g.rows.push(e);g.sum+=e.amount||0;});
   return h+'<div class="list">'+groups.map(function(g){
@@ -650,6 +676,7 @@ function bodyHTML(){
         return '<button type="button" data-act="paymode" data-v="'+m[0]+'" aria-pressed="'+(F.payMode===m[0])+'">'+m[1]+'</button>';}).join('')+'</div></div>'+
       '<div class="field" id="paidBox"'+(F.payMode==='part'?'':' hidden')+'><label for="fPaid">Khách đã trả (đ)</label><input class="inp num" id="fPaid" data-f="paid" data-money inputmode="numeric" placeholder="VD: 500.000" value="'+esc(F.paid)+'" autocomplete="off"><div class="hint" id="paidHint"></div></div>'+
       '<div class="totals"><div class="kv"><span>Tổng tiền gà</span><span class="num" id="tTotal"></span></div><div class="kv"><span>Khách đã trả</span><span class="num" id="tPaid"></span></div><div class="kv big"><span>Còn nợ</span><span class="num" id="tLeft"></span></div></div>'+
+      '<div class="field"><button type="button" class="btn ghost block" id="qrBtn" data-act="toggle-qr">Hiện mã QR thu tiền</button><div id="qrBox"></div></div>'+
       '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="VD: Giao tới quán lúc 6 giờ sáng">'+esc(F.note)+'</textarea></div>';
   }
   if(F.kind==='pre'){
@@ -670,6 +697,7 @@ function bodyHTML(){
   return '<div class="totals"><div class="kv"><span>Khách</span><b>'+esc(F.name)+'</b></div><div class="kv big"><span>Đang nợ</span><span class="num neg">'+money(F.owed)+'</span></div></div>'+
     '<div class="field"><label for="fAmt">Khách trả lần này (đ)</label><input class="inp num" id="fAmt" data-f="amount" data-money inputmode="numeric" value="'+esc(F.amount)+'" autocomplete="off"><div class="hint" id="amtHint"></div></div>'+
     '<button type="button" class="btn ghost" data-act="payfull">Khách trả hết '+money(F.owed)+'</button>'+
+    '<div class="field"><button type="button" class="btn ghost block" id="qrBtn" data-act="toggle-qr">Hiện mã QR thu tiền</button><div id="qrBox"></div></div>'+
     '<div class="field"><label for="fDate">Ngày thu</label><input class="inp" type="date" id="fDate" data-f="date" value="'+F.date+'"></div>'+
     '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="VD: Chuyển khoản">'+esc(F.note)+'</textarea></div>';
 }
@@ -706,8 +734,9 @@ function syncForm(){
     var dh=$('#depHint');if(dh)dh.textContent=moneyN(F.deposit)?'= '+money(moneyN(F.deposit)):'';
     $$('[data-act="ctype"]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===F.ctype));});
   }else{
-    var ah=$('#amtHint');if(ah)ah.textContent=moneyN(F.amount)?'= '+money(moneyN(F.amount))+(moneyN(F.amount)<1000?'  (nhỏ hơn 1.000đ, kiểm tra lại, phải gõ đủ số)':''):'Gõ 500 là 500.000đ';
+    var ah=$('#amtHint');if(ah)ah.textContent=moneyN(F.amount)?'= '+money(moneyN(F.amount))+(moneyN(F.amount)<1000?'  (nhỏ hơn 1.000đ, kiểm tra lại, phải gõ đủ số)':''):'Gõ đủ số tiền, VD: 500.000';
   }
+  renderQR();
 }
 function showErr(m){$('#err').innerHTML=m?'<div class="err" role="alert">'+esc(m)+'</div>':'';}
 
@@ -841,10 +870,18 @@ function clearSample(){
   COLS.forEach(function(c){S[c].forEach(function(x){if(x.sample)list.push(['del',c,x.id]);});});
   closeSheet();runBatch(list,'Đã xoá dữ liệu mẫu');
 }
+function bankFormHTML(){
+  return '<div class="card stack" style="gap:10px"><b>Tài khoản nhận tiền (mã QR)</b>'+
+    '<div class="field"><label for="bkBank">Ngân hàng</label><select class="inp" id="bkBank"><option value="">Chọn ngân hàng</option>'+BANKS.map(function(b){return '<option value="'+b[0]+'"'+(BANK.bank===b[0]?' selected':'')+'>'+b[1]+'</option>';}).join('')+'</select></div>'+
+    '<div class="field"><label for="bkAcc">Số tài khoản</label><input class="inp" id="bkAcc" inputmode="numeric" autocomplete="off" value="'+esc(BANK.acc)+'"></div>'+
+    '<div class="field"><label for="bkName">Tên chủ tài khoản</label><input class="inp" id="bkName" autocomplete="off" placeholder="VD: NGUYEN VAN A" value="'+esc(BANK.name)+'"></div>'+
+    '<div class="err" id="bkMsg" style="background:none;padding:0"></div>'+
+    '<button class="btn dark block" data-act="save-bank">Lưu tài khoản</button></div>';
+}
 function openSettings(){
   var body='<div class="stack" style="gap:16px"><p>'+(S.mode==='cloud'?'Sổ được lưu trên đám mây, đăng nhập '+(curUser&&curUser.email?curUser.email:'Google')+'. Mở bằng điện thoại hay máy khác cùng tài khoản này vẫn thấy đủ.':'Sổ đang lưu trong trình duyệt của máy này. Đổi máy hoặc xoá dữ liệu trình duyệt sẽ mất sổ.')+'</p>'+
     '<button class="btn ghost block" data-act="load-sample">Nạp dữ liệu mẫu để xem thử</button>'+
-    (hasSample()?'<button class="btn danger block" data-act="clear-sample">Xoá dữ liệu mẫu</button>':'')+(S.mode==='cloud'?'<button class="btn ghost block" data-act="logout">Đăng xuất</button>':'')+'</div>';
+    (hasSample()?'<button class="btn danger block" data-act="clear-sample">Xoá dữ liệu mẫu</button>':'')+bankFormHTML()+(S.mode==='cloud'?'<button class="btn ghost block" data-act="logout">Đăng xuất</button>':'')+'</div>';
   showSheet('Tuỳ chọn',body,'<button class="btn dark block" data-act="close">Xong</button>');
 }
 
@@ -855,6 +892,14 @@ var ACT={
   sel:function(el){S.sel=+el.dataset.i;drawChart();},
   'toggle-table':function(){S.table=!S.table;render();},
   settings:openSettings,
+  'toggle-qr':function(){F.qrOn=!F.qrOn;lastQr='';renderQR();},
+  'save-bank':function(){
+    var b=document.getElementById('bkBank').value,a=document.getElementById('bkAcc').value.replace(/\D/g,''),n=document.getElementById('bkName').value.trim();
+    var m=document.getElementById('bkMsg');
+    if(!b||!a){m.textContent='Chọn ngân hàng và nhập số tài khoản.';return;}
+    if(!n){m.textContent='Nhập tên chủ tài khoản.';return;}
+    bankSave({bank:b,acc:a,name:n}).then(function(){closeSheet();toast('Đã lưu tài khoản ngân hàng');}).catch(function(){m.textContent='Không lưu lên đám mây được, đã lưu trên máy này.';});
+  },
   logout:function(){closeSheet();authApi.signOut().then(function(){location.reload();});},
   close:closeSheet,
   'new-order':function(){openOrder();},
@@ -990,11 +1035,17 @@ function boot(){
     startedFor=user.uid;curUser=user;
     var root=fs.collection('users').doc(user.uid);
     var db={collection:function(c){return root.collection(c);}};
+    cloudRoot=root;
+    root.collection('settings').doc('bank').get().then(function(d){if(d.exists&&d.data().acc){BANK=d.data();try{localStorage.setItem('soBanGa.bank',JSON.stringify(BANK));}catch(e){}}else if(BANK.acc){root.collection('settings').doc('bank').set(BANK);}}).catch(function(e){console.error(e);});
     migrateLocal(root,user.uid).catch(function(e){console.error(e);toast('Chưa chuyển được dữ liệu cũ, sẽ thử lại lần sau.');}).then(function(){
       store=cloudStore(db);S.mode=store.mode;store.init();refresh();
     });
   });
 }
+['gesturestart','gesturechange','gestureend'].forEach(function(n){document.addEventListener(n,function(e){e.preventDefault();});});
+document.addEventListener('touchmove',function(e){if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
+var lastTap=0;document.addEventListener('touchend',function(e){var t=Date.now();if(t-lastTap<350)e.preventDefault();lastTap=t;},{passive:false});
+document.addEventListener('wheel',function(e){if(e.ctrlKey)e.preventDefault();},{passive:false});
 boot();
 })();
 
