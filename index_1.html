@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sổ Bán Gà</title>
+<meta name="theme-color" content="#f5b21b">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>:root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -225,8 +230,10 @@ textarea.inp{height:auto;min-height:72px;padding:12px 14px;resize:vertical}
 'use strict';
 /* ================= hằng số & tiện ích ================= */
 var COLS=['orders','expenses','preorders','payments'];
-var PRODUCTS=['Gà ta','Gà thả vườn','Gà công nghiệp','Gà trống thiến','Gà mái già'];
-var CATS=[['nhap','Nhập gà'],['thucan','Thức ăn'],['vanchuyen','Vận chuyển'],['nhancong','Nhân công'],['khac','Khác']];
+var PRODUCTS=['Gà trống ta','Gà mái ta','Gà trống Bắc Giang','Gà mái Bắc Giang'];
+function allProducts(){var ex=[];['orders','preorders'].forEach(function(c){(S[c]||[]).forEach(function(o){if(o.sample)return;(o.items||[]).forEach(function(i){if(i.name&&PRODUCTS.indexOf(i.name)<0&&ex.indexOf(i.name)<0)ex.push(i.name);});});});return PRODUCTS.concat(ex);}
+var CATS=[['nhap','Mua gà về'],['thucan','Cám, thóc, ngô'],['thuoc','Thuốc, thú y'],['chuong','Chuồng trại, điện nước'],['vanchuyen','Xăng xe, cước vận chuyển'],['nhancong','Công thuê mướn'],['khac','Chi khác']];
+var EXP_HINT={nhap:'VD: Mua 40 con gà mái ta của ông Ba ở Bắc Giang',thucan:'VD: 5 bao cám, 2 bao ngô, 1 bao thóc',thuoc:'VD: Thuốc phòng bệnh, vắc-xin Newcastle, men tiêu hoá',chuong:'VD: Tiền điện tháng 10, sửa lưới chuồng, mua trấu lót',vanchuyen:'VD: Xăng xe đi lấy gà, cước xe tải chở cám',nhancong:'VD: Công bắt gà, công người phụ giết mổ',khac:'VD: Ghi rõ khoản chi gì'};
 var CAT_NAME={};CATS.forEach(function(c){CAT_NAME[c[0]]=c[1];});
 var DOW=['CN','T2','T3','T4','T5','T6','T7'];
 var DOWFULL=['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'];
@@ -249,7 +256,7 @@ function money(n){return fmtInt(n)+'đ';}
 function fmtQ(n){return String(Math.round((n||0)*100)/100).replace('.',',');}
 function tick(v){return v===0?'0':v>=1e6?fmtQ(v/1e6)+'tr':fmtQ(v/1e3)+'k';}
 function qtyN(s){var n=parseFloat(String(s||'').replace(',','.'));return isFinite(n)&&n>0?n:0;}
-function moneyN(s){var n=parseInt(String(s||'').replace(/[^\d]/g,''),10)||0;if(n>0&&n<1000)n*=1000;return n;}
+function moneyN(s){var n=parseInt(String(s||'').replace(/[^\d]/g,''),10)||0;return n;}
 function key(s){return String(s||'').trim().toLowerCase();}
 function clean(o){return JSON.parse(JSON.stringify(o));}
 function relDate(s){
@@ -510,7 +517,7 @@ function drawChart(){
 function viewOrders(){
   return '<div class="seg" role="group" aria-label="Lọc đơn">'+[['all','Tất cả'],['debt','Còn nợ'],['rest','Nhà hàng']].map(function(f){
     return '<button data-act="ofilter" data-v="'+f[0]+'" aria-pressed="'+(S.ofilter===f[0])+'">'+f[1]+'</button>';}).join('')+'</div>'+
-    '<input class="search" id="oq" type="search" placeholder="Tìm theo tên khách hoặc loại gà" value="'+esc(S.oq)+'" autocomplete="off"><div id="olist"></div>';
+    '<input class="search" id="oq" type="search" placeholder="Tìm theo tên người mua hoặc loại gà" value="'+esc(S.oq)+'" autocomplete="off"><div id="olist"></div>';
 }
 function renderOrderList(){
   var el=$('#olist');if(!el)return;
@@ -609,7 +616,7 @@ function ctypeSeg(){
   return '<div class="seg" role="group" aria-label="Loại khách">'+[['le','Khách lẻ'],['nhahang','Nhà hàng, quán ăn']].map(function(c){
     return '<button type="button" data-act="ctype" data-v="'+c[0]+'" aria-pressed="'+(F.ctype===c[0])+'">'+c[1]+'</button>';}).join('')+'</div>';
 }
-function newLine(name){var l={name:name||'Gà ta',custom:false,unit:'kg',qty:'',price:'',priceAuto:true};autofill(l);return l;}
+function newLine(name){var l={name:name||'Gà trống ta',custom:false,unit:'kg',qty:'',price:'',priceAuto:true};autofill(l);return l;}
 function autofill(l){
   if(!(l.priceAuto||!l.price))return;
   var p=lastPrice(l.name,l.unit,F.ctype);
@@ -617,11 +624,11 @@ function autofill(l){
 }
 function lineHTML(l,i){
   var many=F.lines.length>1;
-  var chips=PRODUCTS.map(function(p){return '<button type="button" class="chip" aria-pressed="'+(!l.custom&&l.name===p)+'" data-act="prod" data-i="'+i+'" data-v="'+esc(p)+'">'+esc(p)+'</button>';}).join('')+
-    '<button type="button" class="chip" aria-pressed="'+l.custom+'" data-act="prod" data-i="'+i+'" data-v="__other">Loại khác</button>';
+  var chips=allProducts().map(function(p){return '<button type="button" class="chip" aria-pressed="'+(!l.custom&&l.name===p)+'" data-act="prod" data-i="'+i+'" data-v="'+esc(p)+'">'+esc(p)+'</button>';}).join('')+
+    '<button type="button" class="chip" aria-pressed="'+l.custom+'" data-act="prod" data-i="'+i+'" data-v="__other">+ Thêm loại khác</button>';
   return '<div class="line"><div class="line-h"><span class="lab">Loại gà'+(many?' '+(i+1):'')+'</span>'+(many?'<button type="button" class="rm" data-act="rmline" data-i="'+i+'">Bỏ dòng này</button>':'')+'</div>'+
     '<div class="chips">'+chips+'</div>'+
-    (l.custom?'<input class="inp" id="ln'+i+'n" data-f="name" data-i="'+i+'" placeholder="Tên loại gà, VD: Gà tre" value="'+esc(l.name)+'" autocomplete="off">':'')+
+    (l.custom?'<input class="inp" id="ln'+i+'n" data-f="name" data-i="'+i+'" placeholder="Gõ tên loại gà mới, VD: Gà ri, Gà chọi" value="'+esc(l.name)+'" autocomplete="off">':'')+
     '<div class="seg" role="group" aria-label="Đơn vị bán"><button type="button" data-act="unit" data-i="'+i+'" data-v="kg" aria-pressed="'+(l.unit==='kg')+'">Bán theo kg</button><button type="button" data-act="unit" data-i="'+i+'" data-v="con" aria-pressed="'+(l.unit==='con')+'">Bán theo con</button></div>'+
     '<div class="grid2 keep"><div class="field"><label for="ln'+i+'q">Số '+l.unit+'</label><input class="inp num" id="ln'+i+'q" data-f="qty" data-i="'+i+'" inputmode="decimal" placeholder="'+(l.unit==='kg'?'VD: 2,5':'VD: 3')+'" value="'+esc(l.qty)+'" autocomplete="off"></div>'+
     '<div class="field"><label for="ln'+i+'p">Giá 1 '+l.unit+' (đ)</label><input class="inp num" id="ln'+i+'p" data-f="price" data-i="'+i+'" data-money inputmode="numeric" placeholder="VD: 95.000" value="'+esc(l.price)+'" autocomplete="off"></div></div>'+
@@ -631,7 +638,7 @@ function linesBlock(){
   return F.lines.map(lineHTML).join('')+'<button type="button" class="btn ghost block" data-act="addline">+ Thêm loại gà khác</button>';
 }
 function custField(){
-  return '<div class="field"><label for="fCust">Tên khách'+(F.kind==='order'?' (bỏ trống nếu khách lẻ)':'')+'</label><input class="inp" id="fCust" data-f="customer" list="dlCust" placeholder="VD: Quán Cơm Bà Sáu" value="'+esc(F.customer)+'" autocomplete="off">'+custDL()+'</div>'+
+  return '<div class="field"><label for="fCust">Tên người mua'+(F.kind==='order'?' (bỏ trống nếu khách lẻ)':'')+'</label><input class="inp" id="fCust" data-f="customer" list="dlCust" placeholder="VD: Chị Lan, Quán cơm Bà Hoa" value="'+esc(F.customer)+'" autocomplete="off">'+custDL()+'</div>'+
     '<div class="field"><span class="lab">Loại khách</span>'+ctypeSeg()+'</div>';
 }
 function bodyHTML(){
@@ -658,7 +665,7 @@ function bodyHTML(){
     return '<div class="field"><span class="lab">Khoản chi</span><div class="chips">'+CATS.map(function(c){return '<button type="button" class="chip" data-act="cat" data-v="'+c[0]+'" aria-pressed="'+(F.cat===c[0])+'">'+c[1]+'</button>';}).join('')+'</div></div>'+
       '<div class="field"><label for="fAmt">Số tiền (đ)</label><input class="inp num" id="fAmt" data-f="amount" data-money inputmode="numeric" placeholder="VD: 3.500.000" value="'+esc(F.amount)+'" autocomplete="off"><div class="hint" id="amtHint"></div></div>'+
       '<div class="field"><label for="fDate">Ngày chi</label><input class="inp" type="date" id="fDate" data-f="date" value="'+F.date+'"></div>'+
-      '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="VD: Nhập 40 con gà ta của anh Ba">'+esc(F.note)+'</textarea></div>';
+      '<div class="field"><label for="fNote">Ghi chú</label><textarea class="inp" id="fNote" data-f="note" placeholder="'+esc(EXP_HINT[F.cat]||EXP_HINT.khac)+'">'+esc(F.note)+'</textarea></div>';
   }
   return '<div class="totals"><div class="kv"><span>Khách</span><b>'+esc(F.name)+'</b></div><div class="kv big"><span>Đang nợ</span><span class="num neg">'+money(F.owed)+'</span></div></div>'+
     '<div class="field"><label for="fAmt">Khách trả lần này (đ)</label><input class="inp num" id="fAmt" data-f="amount" data-money inputmode="numeric" value="'+esc(F.amount)+'" autocomplete="off"><div class="hint" id="amtHint"></div></div>'+
@@ -695,17 +702,17 @@ function syncForm(){
     $('#tTotal').textContent=money(c.total);$('#tPaid').textContent=money(c.paid);
     var tl=$('#tLeft');tl.textContent=money(c.left);tl.className='num'+(c.left>0&&k==='order'?' neg':'');
     var btn=$('#btnSave');if(btn)btn.textContent=(k==='order'?'Lưu đơn':'Lưu đơn đặt')+(c.total?' · '+money(c.total):'');
-    var ph=$('#paidHint');if(ph)ph.textContent=moneyN(F.paid)?'= '+money(moneyN(F.paid)):'Gõ 500 là 500.000đ';
+    var ph=$('#paidHint');if(ph)ph.textContent=moneyN(F.paid)?'= '+money(moneyN(F.paid)):'Gõ đủ số tiền, VD: 500.000';
     var dh=$('#depHint');if(dh)dh.textContent=moneyN(F.deposit)?'= '+money(moneyN(F.deposit)):'';
     $$('[data-act="ctype"]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===F.ctype));});
   }else{
-    var ah=$('#amtHint');if(ah)ah.textContent=moneyN(F.amount)?'= '+money(moneyN(F.amount)):'Gõ 500 là 500.000đ';
+    var ah=$('#amtHint');if(ah)ah.textContent=moneyN(F.amount)?'= '+money(moneyN(F.amount))+(moneyN(F.amount)<1000?'  (nhỏ hơn 1.000đ, kiểm tra lại, phải gõ đủ số)':''):'Gõ 500 là 500.000đ';
   }
 }
 function showErr(m){$('#err').innerHTML=m?'<div class="err" role="alert">'+esc(m)+'</div>':'';}
 
 function linesFromItems(items){
-  return (items||[]).map(function(it){return {name:it.name,custom:PRODUCTS.indexOf(it.name)<0,unit:it.unit,qty:fmtQ(it.qty),price:it.price?fmtInt(it.price):'',priceAuto:false};});
+  return (items||[]).map(function(it){return {name:it.name,custom:allProducts().indexOf(it.name)<0,unit:it.unit,qty:fmtQ(it.qty),price:it.price?fmtInt(it.price):'',priceAuto:false};});
 }
 function openOrder(base,pre){
   var o=base&&!pre?base:null;
@@ -721,7 +728,8 @@ function openOrder(base,pre){
 function openPre(p){
   F={kind:'pre',id:p?p.id:null,createdAt:p?p.createdAt:Date.now(),sample:p?p.sample:undefined,status:p?p.status:'open',
     customer:p?p.customer:'',ctype:p?p.ctype||'le':'le',touched:!!p,phone:p?p.phone||'':'',ddate:p?p.ddate:addDays(today(),1),
-    lines:p?linesFromItems(p.items):[newLine()],deposit:p&&p.deposit?fmtInt(p.deposit):'',note:p?p.note||'':''};
+    lines:[],deposit:p&&p.deposit?fmtInt(p.deposit):'',note:p?p.note||'':''};
+  F.lines=p?linesFromItems(p.items):[newLine()];
   openForm(p?'Sửa đơn đặt':'Khách đặt trước');
 }
 function openExp(e){
@@ -748,14 +756,14 @@ function save(){
     var cust=F.customer.trim();
     if(k==='order'){
       var c=calc();
-      if(c.left>0&&!cust)return showErr('Muốn ghi nợ thì cần có tên khách. Hãy nhập tên khách ở trên.');
+      if(c.left>0&&!cust)return showErr('Muốn ghi nợ thì cần có tên khách. Hãy nhập tên người mua ở trên.');
       var o={id:F.id||uid(),date:F.date||today(),customer:cust,ctype:F.ctype,items:items,total:c.total,paid:c.paid,note:F.note.trim(),createdAt:F.createdAt,sample:F.sample};
       btn.disabled=true;
       write('orders',o).then(function(){
         if(F&&F.fromPre){var p=S.preorders.filter(function(x){return x.id===F.fromPre;})[0];if(p)return write('preorders',Object.assign({},p,{status:'done'}));}
       }).then(function(){finish('Đã lưu đơn');}).catch(function(){btn.disabled=false;});
     }else{
-      if(!cust)return showErr('Nhập tên khách đặt hàng.');
+      if(!cust)return showErr('Nhập tên người đặt hàng.');
       var p={id:F.id||uid(),customer:cust,ctype:F.ctype,phone:F.phone.trim(),ddate:F.ddate||addDays(today(),1),items:items,deposit:moneyN(F.deposit),note:F.note.trim(),status:F.status,createdAt:F.createdAt,sample:F.sample};
       btn.disabled=true;
       write('preorders',p).then(function(){finish('Đã lưu đơn đặt');}).catch(function(){btn.disabled=false;});
@@ -782,10 +790,10 @@ function rng(seed){var s=seed;return function(){s=(s*1664525+1013904223)%4294967
 function buildSample(){
   var r=rng(11),t=today(),docs=[],n=0;
   function pick(a){return a[Math.floor(r()*a.length)];}
-  var RET=['Chị Lan','Anh Tuấn','Cô Hạnh','Anh Dũng','Chị Mai','Chú Bảy'];
+  var RET=['Chị Lan','Anh Tuấn','Cô Hạnh','Anh Dũng','Chị Mai','Chú Hải'];
   var REST=['Quán Cơm Bà Sáu','Nhà hàng Quê Hương','Quán Bún Đậu Ngõ Nhỏ'];
-  var KG={'Gà ta':[125000,110000],'Gà thả vườn':[95000,88000],'Gà công nghiệp':[48000,42000],'Gà trống thiến':[160000,150000],'Gà mái già':[85000,78000]};
-  var CON={'Gà trống thiến':[300000,280000],'Gà mái già':[150000,140000]};
+  var KG={'Gà trống ta':[140000,128000],'Gà mái ta':[125000,115000],'Gà trống Bắc Giang':[135000,125000],'Gà mái Bắc Giang':[120000,110000]};
+  var CON={'Gà trống ta':[320000,300000],'Gà trống Bắc Giang':[300000,280000]};
   function item(name,unit,qty,ct){var i=ct==='nhahang'?1:0;return {name:name,unit:unit,qty:qty,price:unit==='con'?CON[name][i]:KG[name][i]};}
   function order(d,cust,ct,items,mode,note){
     var total=sumItems(items),paid=mode==='full'?total:mode==='none'?0:Math.round(total*0.5/1000)*1000;
@@ -799,8 +807,8 @@ function buildSample(){
       order(d,r()<0.25?'':pick(RET),'le',[item(nm,unit,qty,'le')],'full');
     }
     if(r()<(d<14?0.55:0.3)){
-      var it=[item(pick(['Gà ta','Gà thả vườn','Gà công nghiệp']),'kg',10+Math.floor(r()*26),'nhahang')];
-      if(r()<0.3)it.push(item('Gà trống thiến','con',2+Math.floor(r()*3),'nhahang'));
+      var it=[item(pick(['Gà trống ta','Gà mái ta','Gà mái Bắc Giang']),'kg',10+Math.floor(r()*26),'nhahang')];
+      if(r()<0.3)it.push(item('Gà trống Bắc Giang','con',2+Math.floor(r()*3),'nhahang'));
       order(d,pick(REST),'nhahang',it,'full');
     }
     if(d%3===1)docs.push(['expenses',{id:'mau-e-'+(n++),date:addDays(t,-d),cat:'nhap',amount:Math.round((2.5e6+r()*3.5e6)/1e5)*1e5,note:'Nhập '+(30+Math.floor(r()*40))+' con gà, anh Ba',createdAt:Date.now()+n,sample:true}]);
@@ -808,13 +816,13 @@ function buildSample(){
     if(d%5===2)docs.push(['expenses',{id:'mau-e-'+(n++),date:addDays(t,-d),cat:'vanchuyen',amount:Math.round((100000+r()*100000)/1e4)*1e4,note:'Xăng xe đi giao',createdAt:Date.now()+n,sample:true}]);
     if(d%14===4)docs.push(['expenses',{id:'mau-e-'+(n++),date:addDays(t,-d),cat:'nhancong',amount:1500000,note:'Công người phụ việc',createdAt:Date.now()+n,sample:true}]);
   }
-  order(1,'Nhà hàng Quê Hương','nhahang',[item('Gà thả vườn','kg',25,'nhahang'),item('Gà ta','kg',12,'nhahang')],'none','Ghi nợ, cuối tuần thanh toán');
-  order(2,'Quán Bún Đậu Ngõ Nhỏ','nhahang',[item('Gà thả vườn','kg',15,'nhahang')],'half');
-  order(0,'Quán Cơm Bà Sáu','nhahang',[item('Gà ta','kg',18,'nhahang'),item('Gà trống thiến','con',2,'nhahang')],'half');
+  order(1,'Nhà hàng Quê Hương','nhahang',[item('Gà mái ta','kg',25,'nhahang'),item('Gà trống ta','kg',12,'nhahang')],'none','Ghi nợ, cuối tuần thanh toán');
+  order(2,'Quán Bún Đậu Ngõ Nhỏ','nhahang',[item('Gà mái ta','kg',15,'nhahang')],'half');
+  order(0,'Quán Cơm Bà Sáu','nhahang',[item('Gà trống ta','kg',18,'nhahang'),item('Gà trống Bắc Giang','con',2,'nhahang')],'half');
   docs.push(['payments',{id:'mau-p-1',key:'nhà hàng quê hương',customer:'Nhà hàng Quê Hương',amount:1000000,date:addDays(t,0),note:'Chuyển khoản',createdAt:Date.now(),sample:true}]);
-  docs.push(['preorders',{id:'mau-d-1',customer:'Quán Cơm Bà Sáu',ctype:'nhahang',phone:'0901 234 567',ddate:addDays(t,1),items:[item('Gà ta','kg',20,'nhahang')],deposit:500000,note:'Giao trước 7 giờ sáng',status:'open',createdAt:Date.now(),sample:true}]);
-  docs.push(['preorders',{id:'mau-d-2',customer:'Chị Mai',ctype:'le',phone:'',ddate:addDays(t,2),items:[item('Gà trống thiến','con',2,'le')],deposit:200000,note:'Làm sẵn cho ngày giỗ',status:'open',createdAt:Date.now()+1,sample:true}]);
-  docs.push(['preorders',{id:'mau-d-3',customer:'Nhà hàng Quê Hương',ctype:'nhahang',phone:'',ddate:addDays(t,-1),items:[item('Gà thả vườn','kg',30,'nhahang')],deposit:0,note:'',status:'open',createdAt:Date.now()+2,sample:true}]);
+  docs.push(['preorders',{id:'mau-d-1',customer:'Quán Cơm Bà Sáu',ctype:'nhahang',phone:'0901 234 567',ddate:addDays(t,1),items:[item('Gà trống ta','kg',20,'nhahang')],deposit:500000,note:'Giao trước 7 giờ sáng',status:'open',createdAt:Date.now(),sample:true}]);
+  docs.push(['preorders',{id:'mau-d-2',customer:'Chị Mai',ctype:'le',phone:'',ddate:addDays(t,2),items:[item('Gà trống Bắc Giang','con',2,'le')],deposit:200000,note:'Làm sẵn cho ngày giỗ',status:'open',createdAt:Date.now()+1,sample:true}]);
+  docs.push(['preorders',{id:'mau-d-3',customer:'Nhà hàng Quê Hương',ctype:'nhahang',phone:'',ddate:addDays(t,-1),items:[item('Gà mái ta','kg',30,'nhahang')],deposit:0,note:'',status:'open',createdAt:Date.now()+2,sample:true}]);
   return docs;
 }
 function runBatch(list,msg){
@@ -887,7 +895,7 @@ var ACT={
     syncForm();
   },
   paymode:function(el){F.payMode=el.dataset.v;$$('[data-act="paymode"]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===F.payMode));});$('#paidBox').hidden=F.payMode!=='part';syncForm();if(F.payMode==='part')$('#fPaid').focus();},
-  cat:function(el){F.cat=el.dataset.v;$$('[data-act="cat"]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===F.cat));});}
+  cat:function(el){F.cat=el.dataset.v;var nt=$('#fNote');if(nt)nt.placeholder=EXP_HINT[F.cat]||EXP_HINT.khac;$$('[data-act="cat"]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===F.cat));});}
 };
 document.addEventListener('click',function(ev){
   var el=ev.target.closest('[data-act]');
