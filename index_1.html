@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <title>Sổ Bán Gà</title>
@@ -831,9 +834,9 @@ function clearSample(){
   closeSheet();runBatch(list,'Đã xoá dữ liệu mẫu');
 }
 function openSettings(){
-  var body='<div class="stack" style="gap:16px"><p>'+(S.mode==='cloud'?'Sổ được lưu trên đám mây, mở bằng điện thoại khác vẫn thấy đủ. Người bạn mời chỉnh sửa (vợ, chồng, nhân viên) cũng ghi chép được vào cùng một sổ.':'Sổ đang lưu trong trình duyệt của máy này. Đổi máy hoặc xoá dữ liệu trình duyệt sẽ mất sổ.')+'</p>'+
+  var body='<div class="stack" style="gap:16px"><p>'+(S.mode==='cloud'?'Sổ được lưu trên đám mây, đăng nhập '+(curUser&&curUser.email?curUser.email:'Google')+'. Mở bằng điện thoại hay máy khác cùng tài khoản này vẫn thấy đủ.':'Sổ đang lưu trong trình duyệt của máy này. Đổi máy hoặc xoá dữ liệu trình duyệt sẽ mất sổ.')+'</p>'+
     '<button class="btn ghost block" data-act="load-sample">Nạp dữ liệu mẫu để xem thử</button>'+
-    (hasSample()?'<button class="btn danger block" data-act="clear-sample">Xoá dữ liệu mẫu</button>':'')+'</div>';
+    (hasSample()?'<button class="btn danger block" data-act="clear-sample">Xoá dữ liệu mẫu</button>':'')+(S.mode==='cloud'?'<button class="btn ghost block" data-act="logout">Đăng xuất</button>':'')+'</div>';
   showSheet('Tuỳ chọn',body,'<button class="btn dark block" data-act="close">Xong</button>');
 }
 
@@ -844,6 +847,7 @@ var ACT={
   sel:function(el){S.sel=+el.dataset.i;drawChart();},
   'toggle-table':function(){S.table=!S.table;render();},
   settings:openSettings,
+  logout:function(){closeSheet();authApi.signOut().then(function(){location.reload();});},
   close:closeSheet,
   'new-order':function(){openOrder();},
   'new-pre':function(){openPre();},
@@ -924,17 +928,63 @@ document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&F)closeSh
 $('#btnSet').dataset.act='settings';
 
 /* ================= khởi động ================= */
+var FB_CONFIG={apiKey:"AIzaSyByxEBkmXlCeni9ZflDIUXuvhwID8_XmbM",authDomain:"so-ban-ga.firebaseapp.com",projectId:"so-ban-ga",storageBucket:"so-ban-ga.firebasestorage.app",messagingSenderId:"636627959643",appId:"1:636627959643:web:d3ab43322d2dcd8a38e47e"};
+var curUser=null,authApi=null;
+function showLogin(msg){
+  var o=document.getElementById('loginOv');
+  if(!o){
+    o=document.createElement('div');o.id='loginOv';
+    o.style.cssText='position:fixed;inset:0;z-index:9999;background:#fff8e7;display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,sans-serif;color:#222';
+    o.innerHTML='<div style="max-width:340px;width:100%;text-align:center"><div style="font-size:44px">🐔</div><h1 style="margin:8px 0 6px;font-size:24px">Sổ Bán Gà</h1><p style="margin:0 0 20px;color:#555;font-size:15px;line-height:1.5">Đăng nhập bằng Google để lưu sổ lên đám mây và dùng trên mọi thiết bị.</p><button id="loginBtn" style="width:100%;padding:14px;border:0;border-radius:12px;background:#f5b21b;color:#222;font-size:16px;font-weight:700;cursor:pointer">Đăng nhập bằng Google</button><p id="loginMsg" style="color:#b3261e;font-size:13px;min-height:18px;margin-top:12px"></p></div>';
+    document.body.appendChild(o);
+    document.getElementById('loginBtn').onclick=function(){
+      document.getElementById('loginMsg').textContent='';
+      authApi.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function(e){
+        if(e&&e.code==='auth/popup-closed-by-user')return;
+        document.getElementById('loginMsg').textContent='Không đăng nhập được ('+((e&&e.code)||'lỗi')+'). Thử lại nhé.';
+      });
+    };
+  }
+  o.hidden=false;o.style.display='flex';
+  if(msg)document.getElementById('loginMsg').textContent=msg;
+}
+function hideLogin(){var o=document.getElementById('loginOv');if(o){o.hidden=true;o.style.display='none';}}
+function migrateLocal(root,uid){
+  var flag='soBanGa.migrated.'+uid,raw=null;
+  try{if(localStorage.getItem(flag))return Promise.resolve();raw=localStorage.getItem(LS_KEY);}catch(e){return Promise.resolve();}
+  if(!raw)return Promise.resolve();
+  var j;try{j=JSON.parse(raw);}catch(e){return Promise.resolve();}
+  var ops=[];
+  COLS.forEach(function(c){(Array.isArray(j[c])?j[c]:[]).forEach(function(o){if(o&&o.id)ops.push([c,o]);});});
+  var chain=Promise.resolve();
+  for(var k=0;k<ops.length;k+=400){(function(part){
+    chain=chain.then(function(){
+      var b=root.firestore.batch();
+      part.forEach(function(x){b.set(root.collection(x[0]).doc(String(x[1].id)),x[1]);});
+      return b.commit();
+    });
+  })(ops.slice(k,k+400));}
+  return chain.then(function(){
+    try{localStorage.setItem(flag,'1');}catch(e){}
+    if(ops.length)toast('Đã chuyển '+ops.length+' bản ghi từ máy lên đám mây');
+  });
+}
 function boot(){
   render();
-  var p=Promise.resolve(null);
-  if(window.claude&&typeof window.claude.use==='function'){
-    p=Promise.race([Promise.resolve(window.claude.use('db')),new Promise(function(r){setTimeout(function(){r(null);},8000);})]).catch(function(){return null;});
-  }
-  p.then(function(db){
-    store=db?cloudStore(db):localStore();
-    S.mode=store.mode;
-    store.init();
-    refresh();
+  if(!window.firebase){store=localStore();S.mode=store.mode;store.init();refresh();return;}
+  firebase.initializeApp(FB_CONFIG);
+  authApi=firebase.auth();
+  var fs=firebase.firestore(),startedFor=null;
+  authApi.onAuthStateChanged(function(user){
+    if(!user){curUser=null;startedFor=null;showLogin();return;}
+    hideLogin();
+    if(startedFor===user.uid)return;
+    startedFor=user.uid;curUser=user;
+    var root=fs.collection('users').doc(user.uid);
+    var db={collection:function(c){return root.collection(c);}};
+    migrateLocal(root,user.uid).catch(function(e){console.error(e);toast('Chưa chuyển được dữ liệu cũ, sẽ thử lại lần sau.');}).then(function(){
+      store=cloudStore(db);S.mode=store.mode;store.init();refresh();
+    });
   });
 }
 boot();
