@@ -746,6 +746,7 @@ function lineHTML(l,i){
   return '<div class="line"><div class="line-h"><span class="lab">Loại gà'+(many?' '+(i+1):'')+'</span>'+(many?'<button type="button" class="rm" data-act="rmline" data-i="'+i+'">Bỏ dòng này</button>':'')+'</div>'+
     '<select class="inp" id="lsel'+i+'" data-act="prodsel" data-i="'+i+'" aria-label="Chọn loại gà">'+opts+'</select>'+
     (l.custom?'<input class="inp" id="ln'+i+'n" data-f="name" data-i="'+i+'" placeholder="Gõ tên loại gà mới, VD: Gà ri, Gà chọi" value="'+esc(l.name)+'" autocomplete="off">':'')+
+    (F.kind==='pre'?'<div class="seg" role="group" aria-label="Khách đặt theo"><button type="button" data-act="unit" data-i="'+i+'" data-v="kg" aria-pressed="'+(l.unit==='kg')+'">Đặt theo kg</button><button type="button" data-act="unit" data-i="'+i+'" data-v="con" aria-pressed="'+(l.unit==='con')+'">Đặt theo con</button></div>':'')+
     '<div class="grid2 keep"><div class="field"><label for="ln'+i+'q">Số '+l.unit+'</label><input class="inp num" id="ln'+i+'q" data-f="qty" data-i="'+i+'" inputmode="decimal" placeholder="'+(l.unit==='kg'?'VD: 2,5':'VD: 3')+'" value="'+esc(l.qty)+'" autocomplete="off"></div>'+
     '<div class="field"><label for="ln'+i+'p">Giá 1 '+l.unit+' (nghìn đ)</label><input class="inp num" id="ln'+i+'p" data-f="price" data-i="'+i+'" data-money inputmode="decimal" placeholder="VD: 95 là 95.000đ" value="'+esc(l.price)+'" autocomplete="off"></div></div>'+
     '<div class="hint" data-hint="'+i+'"></div></div>';
@@ -857,8 +858,12 @@ function openOrder(base,pre){
     customer:o?o.customer||'':pre?pre.customer:'',ctype:o?o.ctype||'le':pre?pre.ctype||'le':'le',touched:!!(o||pre),
     lines:[],payMode:'full',paid:'',note:o?o.note||'':'',fromPre:pre?pre.id:null,deposit:pre&&pre.deposit?pre.deposit:0};
   if(o){F.lines=linesFromItems(o.items);F.payMode=o.paid>=o.total?'full':o.paid<=0?'debt':'part';F.paid=o.paid?fmtK(o.paid):'';}
-  else if(pre){F.lines=linesFromItems(pre.items);F.lines.forEach(function(l){if(!l.price){l.priceAuto=true;autofill(l);}});
-    F.note=[pre.note,pre.deposit?'Đã cọc '+money(pre.deposit):''].filter(Boolean).join(' · ');}
+  else if(pre){F.lines=linesFromItems(pre.items);var byCon=[];
+    F.lines.forEach(function(l){
+      if(l.unit==='con'){byCon.push(l.qty+' con '+l.name);l.unit='kg';l.qty='';l.price='';l.priceAuto=true;}
+      if(!l.price){l.priceAuto=true;autofill(l);}
+    });
+    F.note=[byCon.length?'Khách đặt '+byCon.join(', ')+' (cân khi giao)':'',pre.note,pre.deposit?'Đã cọc '+money(pre.deposit):''].filter(Boolean).join(' · ');}
   else F.lines=[newLine()];
   openForm(o?'Sửa đơn bán':pre?'Giao hàng cho khách':'Ghi đơn bán');
 }
@@ -1116,6 +1121,7 @@ var ACT={
   save:save,del:del,
   addline:function(){F.lines.push(newLine());refreshBody();var s=$('#sbody');s.scrollTop=s.scrollHeight;},
   rmline:function(el){F.lines.splice(+el.dataset.i,1);refreshBody();},
+  unit:function(el){var l=F.lines[+el.dataset.i];if(l.unit===el.dataset.v)return;l.unit=el.dataset.v;l.priceAuto=true;l.price='';autofill(l);refreshBody();},
   prod:function(el){
     var l=F.lines[+el.dataset.i],v=el.dataset.v;
     if(v==='__other'){l.custom=true;l.name='';}else{l.custom=false;l.name=v;l.priceAuto=l.priceAuto||!l.price;autofill(l);}
